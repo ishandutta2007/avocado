@@ -38,7 +38,6 @@ __all__ = [
 
 # pylint: disable=R0903
 class LinuxDistro:
-
     """
     Simple collection of information for a Linux Distribution
     """
@@ -97,7 +96,6 @@ UNKNOWN_DISTRO = LinuxDistro(
 
 
 class Probe:
-
     """
     Probes the machine and does it best to confirm it's the right distro.
     If given an avocado.utils.ssh.Session object representing another machine, Probe
@@ -276,7 +274,8 @@ class Probe:
         match = self._get_version_match()
         if match is not None:
             if len(match.groups()) > 1:
-                release = match.groups()[1]
+                if match.groups()[1]:
+                    release = match.groups()[1]
         return release
 
     def get_distro(self):
@@ -323,7 +322,6 @@ class Probe:
 
 
 class RedHatProbe(Probe):
-
     """
     Probe with version checks for Red Hat Enterprise Linux systems
     """
@@ -337,19 +335,28 @@ class RedHatProbe(Probe):
 
 
 class CentosProbe(RedHatProbe):
-
     """
     Probe with version checks for CentOS systems
     """
 
     CHECK_FILE = "/etc/redhat-release"
-    CHECK_FILE_CONTAINS = "CentOS"
+    CHECK_FILE_CONTAINS = "CentOS Linux"
     CHECK_FILE_DISTRO_NAME = "centos"
-    CHECK_VERSION_REGEX = re.compile(r"CentOS.* release (\d{1,2})\.(\d{1,2}).*")
+    CHECK_VERSION_REGEX = re.compile(r"CentOS Linux release (\d{1,2})\.(\d{1,2}).*")
+
+
+class CentosStreamProbe(RedHatProbe):
+    """
+    Probe with version checks for CentOS Stream systems
+    """
+
+    CHECK_FILE = "/etc/redhat-release"
+    CHECK_FILE_CONTAINS = "CentOS Stream"
+    CHECK_FILE_DISTRO_NAME = "centos-stream"
+    CHECK_VERSION_REGEX = re.compile(r"CentOS Stream release (\d{1,2})")
 
 
 class FedoraProbe(RedHatProbe):
-
     """
     Probe with version checks for Fedora systems
     """
@@ -361,7 +368,6 @@ class FedoraProbe(RedHatProbe):
 
 
 class AmazonLinuxProbe(Probe):
-
     """
     Probe for Amazon Linux systems
     """
@@ -370,12 +376,11 @@ class AmazonLinuxProbe(Probe):
     CHECK_FILE_CONTAINS = "Amazon Linux"
     CHECK_FILE_DISTRO_NAME = "amzn"
     CHECK_VERSION_REGEX = re.compile(
-        r".*VERSION=\"(\d+)\.(\d+)\".*", re.MULTILINE | re.DOTALL
+        r".*VERSION=\"(\d+)\.?(\d+)?\".*", re.MULTILINE | re.DOTALL
     )
 
 
 class DebianProbe(Probe):
-
     """
     Simple probe with file checks for Debian systems
     """
@@ -386,7 +391,6 @@ class DebianProbe(Probe):
 
 
 class UbuntuProbe(Probe):
-
     """
     Simple probe for Ubuntu systems in general
     """
@@ -400,7 +404,6 @@ class UbuntuProbe(Probe):
 
 
 class SUSEProbe(Probe):
-
     """
     Simple probe for SUSE systems in general
     """
@@ -443,7 +446,6 @@ class SUSEProbe(Probe):
 
 
 class OpenEulerProbe(Probe):
-
     """
     Simple probe for openEuler systems in general
     """
@@ -455,7 +457,6 @@ class OpenEulerProbe(Probe):
 
 
 class UnionTechProbe(Probe):
-
     """
     Simple probe for UnionTech systems in general
     """
@@ -480,6 +481,7 @@ def register_probe(probe_class):
 
 register_probe(RedHatProbe)
 register_probe(CentosProbe)
+register_probe(CentosStreamProbe)
 register_probe(FedoraProbe)
 register_probe(AmazonLinuxProbe)
 register_probe(DebianProbe)
@@ -519,7 +521,6 @@ def detect(session=None):
 
 
 class Spec:
-
     """
     Describes a distro, usually for setting minimum distro requirements
     """

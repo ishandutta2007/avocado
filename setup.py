@@ -31,6 +31,8 @@ from setuptools import Command, find_packages, setup
 BASE_PATH = os.path.dirname(__file__)
 with open(os.path.join(BASE_PATH, "VERSION"), "r", encoding="utf-8") as version_file:
     VERSION = version_file.read().strip()
+OPTIONAL_PLUGINS_PATH = os.path.join(BASE_PATH, "optional_plugins")
+EXAMPLES_PLUGINS_TESTS_PATH = os.path.join(BASE_PATH, "examples", "plugins", "tests")
 
 
 def get_long_description():
@@ -39,9 +41,7 @@ def get_long_description():
     return readme_contents
 
 
-def walk_plugins_setup_py(
-    action, action_name=None, directory=os.path.join(BASE_PATH, "optional_plugins")
-):
+def walk_plugins_setup_py(action, action_name=None, directory=OPTIONAL_PLUGINS_PATH):
 
     if action_name is None:
         action_name = action[0].upper()
@@ -76,18 +76,26 @@ class Clean(clean):
         cleaning_list += list(Path("./docs/source/api/").rglob("*.rst"))
 
         for e in cleaning_list:
-            if not os.path.exists(e):
-                continue
-            if os.path.isfile(e):
-                os.remove(e)
-            if os.path.isdir(e):
-                shutil.rmtree(e)
+            try:
+                if not os.path.exists(e):
+                    continue
+                if os.path.isfile(e):
+                    os.remove(e)
+                if os.path.isdir(e):
+                    shutil.rmtree(e)
+            except FileNotFoundError:
+                print(f"File not found: {e}, unable to delete.")
+            except PermissionError:
+                print(f"Permission denied for {e}, unable to delete.")
+            except Exception as ex:
+                print(f"An error occurred while deleting {e}: {ex}")
 
         self.clean_optional_plugins()
 
     @staticmethod
     def clean_optional_plugins():
-        walk_plugins_setup_py(["clean", "--all"])
+        walk_plugins_setup_py(["clean", "--all"], directory=OPTIONAL_PLUGINS_PATH)
+        walk_plugins_setup_py(["clean", "--all"], directory=EXAMPLES_PLUGINS_TESTS_PATH)
 
 
 class Develop(setuptools.command.develop.develop):
@@ -100,17 +108,31 @@ class Develop(setuptools.command.develop.develop):
             None,
             "Do not include in-tree optional plugins in development mode",
         ),
+        (
+            "skip-examples-plugins-tests",
+            None,
+            "Do not include in-tree example plugins for test types in development mode",
+        ),
     ]
 
     boolean_options = setuptools.command.develop.develop.boolean_options + [
         "external",
         "skip-optional-plugins",
+        "skip-examples-plugins-tests",
     ]
 
     def _walk_develop_plugins(self):
         if not self.skip_optional_plugins:
             walk_plugins_setup_py(
-                action=["develop"] + self.action_options, action_name=self.action_name
+                ["develop"] + self.action_options,
+                self.action_name,
+                OPTIONAL_PLUGINS_PATH,
+            )
+        if not self.skip_examples_plugins_tests:
+            walk_plugins_setup_py(
+                ["develop"] + self.action_options,
+                self.action_name,
+                EXAMPLES_PLUGINS_TESTS_PATH,
             )
 
     @property
@@ -143,6 +165,7 @@ class Develop(setuptools.command.develop.develop):
         super().initialize_options()
         self.external = 0  # pylint: disable=W0201
         self.skip_optional_plugins = 0  # pylint: disable=W0201
+        self.skip_examples_plugins_tests = 0  # pylint: disable=W0201
 
     def handle_uninstall(self):
         """When uninstalling, we remove the plugins before Avocado."""
@@ -333,11 +356,12 @@ if __name__ == "__main__":
             "Topic :: Software Development :: Quality Assurance",
             "Topic :: Software Development :: Testing",
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
+            "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
         ],
         packages=find_packages(exclude=("selftests*",)),
         include_package_data=True,
@@ -352,6 +376,7 @@ if __name__ == "__main__":
                 "avocado-runner-tap = avocado.plugins.runners.tap:main",
                 "avocado-runner-asset = avocado.plugins.runners.asset:main",
                 "avocado-runner-package = avocado.plugins.runners.package:main",
+                "avocado-runner-pip = avocado.plugins.runners.pip:main",
                 "avocado-runner-podman-image = avocado.plugins.runners.podman_image:main",
                 "avocado-runner-sysinfo = avocado.plugins.runners.sysinfo:main",
                 "avocado-software-manager = avocado.utils.software_manager.main:main",
@@ -371,6 +396,7 @@ if __name__ == "__main__":
                 "nrunner = avocado.plugins.runner_nrunner:RunnerInit",
                 "testlogsui = avocado.plugins.testlogs:TestLogsUIInit",
                 "human = avocado.plugins.human:HumanInit",
+                "exec-runnables-recipe = avocado.plugins.resolvers:ExecRunnablesRecipeInit",
             ],
             "avocado.plugins.cli": [
                 "xunit = avocado.plugins.xunit:XUnitCLI",
@@ -403,6 +429,7 @@ if __name__ == "__main__":
                 "teststmpdir = avocado.plugins.teststmpdir:TestsTmpDir",
                 "human = avocado.plugins.human:HumanJob",
                 "testlogsui = avocado.plugins.testlogs:TestLogsUI",
+                "suite-dependency = avocado.plugins.dependency:SuiteDependency",
             ],
             "avocado.plugins.test.pre": [
                 "dependency = avocado.plugins.dependency:DependencyResolver",
@@ -435,6 +462,9 @@ if __name__ == "__main__":
                 "python-unittest = avocado.plugins.resolvers:PythonUnittestResolver",
                 "avocado-instrumented = avocado.plugins.resolvers:AvocadoInstrumentedResolver",
                 "tap = avocado.plugins.resolvers:TapResolver",
+                "runnable-recipe = avocado.plugins.resolvers:RunnableRecipeResolver",
+                "runnables-recipe = avocado.plugins.resolvers:RunnablesRecipeResolver",
+                "exec-runnables-recipe = avocado.plugins.resolvers:ExecRunnablesRecipeResolver",
             ],
             "avocado.plugins.suite.runner": [
                 "nrunner = avocado.plugins.runner_nrunner:Runner",
@@ -451,6 +481,7 @@ if __name__ == "__main__":
                 "python-unittest = avocado.plugins.runners.python_unittest:PythonUnittestRunner",
                 "asset = avocado.plugins.runners.asset:AssetRunner",
                 "package = avocado.plugins.runners.package:PackageRunner",
+                "pip = avocado.plugins.runners.pip:PipRunner",
                 "podman-image = avocado.plugins.runners.podman_image:PodmanImageRunner",
                 "sysinfo = avocado.plugins.runners.sysinfo:SysinfoRunner",
             ],
@@ -465,7 +496,7 @@ if __name__ == "__main__":
         },
         zip_safe=False,
         test_suite="selftests",
-        python_requires=">=3.7",
+        python_requires=">=3.8",
         cmdclass={
             "clean": Clean,
             "develop": Develop,

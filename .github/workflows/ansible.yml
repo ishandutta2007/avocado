@@ -12,7 +12,7 @@ jobs:
     name: Ansible (${{matrix.extra}})
     runs-on: ubuntu-latest
     container:
-      image: fedora:36
+      image: fedora:38
     env:
       RUN_BEFORE: 'dnf install -y git ansible'
       GIT_URL: 'https://github.com/${{github.repository}}'
@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: 'master'
           fetch-depth: 0

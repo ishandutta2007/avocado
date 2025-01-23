@@ -12,11 +12,12 @@ jobs:
     name: Run 'make check'
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: true
       - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
       - name: Install dependencies
@@ -27,7 +28,7 @@ jobs:
         run: make check
       - name: Save artifacts
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: job-results-make-check
           path: /home/runner/avocado/job-results/
@@ -37,18 +38,18 @@ jobs:
     name: Avocado pre-release job
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Install avocado
         run: |
-          sudo python3 -m pip install -r requirements-dev.txt
+          pip install -r requirements-dev.txt
           python3 setup.py develop --user
       - name: Avocado pre-release job
         run: ./selftests/pre_release/jobs/pre_release.py
       - name: Save artifacts
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: job-results-pre-release
           path: /home/runner/avocado/job-results/
@@ -58,7 +59,7 @@ jobs:
     name: Check the right RPM packages are available in COPR
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: 'master'
       - name: Check the right RPM packages are available
@@ -68,13 +69,13 @@ jobs:
     name: Avocado deployment
     runs-on: ubuntu-latest
     container:
-      image: fedora:38
+      image: fedora:40
     env:
       GIT_URL: 'https://github.com/avocado-framework/avocado'
       INVENTORY: 'selftests/deployment/inventory'
       PLAYBOOK: 'selftests/deployment/deployment.yml'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Install Ansible
@@ -85,8 +86,44 @@ jobs:
         run: avocado run /usr/bin/true
       - name: Save artifacts
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: job-results-deployment
           path: /github/home/avocado/job-results/
           retention-days: 1
+
+  package-build:
+    name: Build Package (wheel/tarball)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build tarballs and wheels
+      run: make -f Makefile.gh build-wheel check-wheel
+    - name: Save tarballs and wheels as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: tarballs_and_wheels
+        path: ${{github.workspace}}/PYPI_UPLOAD/
+        retention-days: 1
+    - run: echo "🥑 This job's status is ${{ job.status }}."
+
+  publish-to-test-pypi:
+    name: Publish Avocado to TestPyPI
+    needs:
+    - package-build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/avocado-framework
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+    steps:
+    - name: Download all the wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: tarballs_and_wheels
+        path: dist/
+    - name: Publish avocado to test PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/

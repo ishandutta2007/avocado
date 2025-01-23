@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # Execute all unittests with coverage and report code coverage.
 #
 # Copyright: Red Hat Inc.
@@ -15,8 +15,10 @@ echo "Using coverage utility: $COVERAGE"
 
 $COVERAGE erase
 rm -f .coverage.*
-RUNNING_COVERAGE=1 AVOCADO_CHECK_LEVEL=1 UNITTEST_AVOCADO_CMD="$COVERAGE run -p --include 'avocado/*,optional_plugins/*' $PYTHON -m avocado" $COVERAGE run -p --include "avocado/*,optional_plugins/*" ./selftests/run
-$COVERAGE combine .coverage*
+echo -e "import coverage\ncoverage.process_startup()" >> sitecustomize.py
+env COVERAGE_PROCESS_START=.coveragerc $COVERAGE run selftests/check.py --skip=static-checks
+rm -f sitecustomize.py
+$COVERAGE combine
 echo
 $COVERAGE report -m --include "avocado/core/*"
 echo
@@ -25,4 +27,6 @@ echo
 $COVERAGE report -m --include "avocado/plugins/*"
 echo
 $COVERAGE report -m --include "optional_plugins/*"
+echo
+$COVERAGE report
 $COVERAGE xml

@@ -49,13 +49,13 @@ class NetworkInterface:
         self.name = if_name
         self.if_type = if_type
         self.host = host
-        self.distro_is_rhel9 = False
+        self.distro_is_rhel9_or_later = False
 
     @property
     def config_filename(self):
         current_distro = distro_detect()
         if current_distro.name in ["rhel", "fedora"]:
-            if self.distro_is_rhel9:
+            if self.distro_is_rhel9_or_later:
                 path = "/etc/NetworkManager/system-connections"
             else:
                 path = "/etc/sysconfig/network-scripts"
@@ -64,7 +64,7 @@ class NetworkInterface:
         else:
             msg = "Distro not supported by API. Could not get interface filename."
             raise NWException(msg)
-        if self.distro_is_rhel9:
+        if self.distro_is_rhel9_or_later:
             return f"{path}/{self.name}.nmconnection"
         else:
             return f"{path}/ifcfg-{self.name}"
@@ -73,7 +73,7 @@ class NetworkInterface:
     def config_file_path(self):
         current_distro = distro_detect()
         if current_distro.name in ["rhel", "fedora"]:
-            if self.distro_is_rhel9:
+            if self.distro_is_rhel9_or_later:
                 return "/etc/NetworkManager/system-connections"
             else:
                 return "/etc/sysconfig/network-scripts"
@@ -87,7 +87,7 @@ class NetworkInterface:
     def slave_config_filename(self):
         try:
             slave_dict = self._get_bondinterface_details()
-            if self.distro_is_rhel9:
+            if self.distro_is_rhel9_or_later:
                 return [
                     f"{self.config_file_path}/{slave}.nmconnection"
                     for slave in slave_dict["slaves"]
@@ -113,10 +113,10 @@ class NetworkInterface:
                 if item.get("ifname") == self.name:
                     return item
             raise NWException("Interface not found")
-        except (NWException, json.JSONDecodeError):
+        except (NWException, json.JSONDecodeError) as exc:
             msg = f"Unable to get the details of interface {self.name}"
             LOG.error(msg)
-            raise NWException(msg)
+            raise NWException(msg) from exc
 
     def _get_bondinterface_details(self):
         cmd = (
@@ -126,8 +126,10 @@ class NetworkInterface:
         try:
             mode, slaves = run_command(cmd, self.host).splitlines()
             return {"mode": mode.split(), "slaves": slaves.split()}
-        except Exception:
-            raise NWException(f"Slave interface not found for " f"the bond {self.name}")
+        except Exception as exc:
+            raise NWException(
+                f"Slave interface not found for " f"the bond {self.name}"
+            ) from exc
 
     def _move_file_to_backup(self, filename, ignore_missing=True):
         destination = f"{filename}.backup"
@@ -158,7 +160,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Adding hw address fails: {ex}")
+            raise NWException(f"Adding hw address fails: {ex}") from ex
 
     def add_ipaddr(self, ipaddr, netmask):
         """Add an IP Address (with netmask) to the interface.
@@ -177,7 +179,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Failed to add address {ex}")
+            raise NWException(f"Failed to add address {ex}") from ex
 
     @property
     def vlans(self):
@@ -218,7 +220,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Failed to add VLAN tag: {ex}")
+            raise NWException(f"Failed to add VLAN tag: {ex}") from ex
 
     def remove_vlan_by_tag(self, vlan_num):
         """Remove the VLAN of the interface by tag number.
@@ -240,7 +242,7 @@ class NetworkInterface:
             run_command(cmd, self.host, sudo=True)
             return True
         except Exception as ex:
-            raise NWException(f"Failed to remove VLAN interface: {ex}")
+            raise NWException(f"Failed to remove VLAN interface: {ex}") from ex
 
     def remove_all_vlans(self):
         """Remove all VLANs of this interface.
@@ -253,7 +255,7 @@ class NetworkInterface:
                 cmd = f"ip link delete {v}"
                 run_command(cmd, self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Failed to remove VLAN interface: {ex}")
+            raise NWException(f"Failed to remove VLAN interface: {ex}") from ex
 
     def bring_down(self):
         """Shutdown the interface.
@@ -268,7 +270,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Failed to bring down: {ex}")
+            raise NWException(f"Failed to bring down: {ex}") from ex
 
     def bring_up(self):
         """ "Wake-up the interface.
@@ -281,7 +283,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
-            raise NWException(f"Failed to bring up: {ex}")
+            raise NWException(f"Failed to bring up: {ex}") from ex
 
     def is_admin_link_up(self):
         """Check the admin link state is up or not.
@@ -292,8 +294,8 @@ class NetworkInterface:
         try:
             if "UP" in self._get_interface_details().get("flags"):
                 return True
-        except (NWException, IndexError):
-            raise NWException("Could not get Administrative link state.")
+        except (NWException, IndexError) as exc:
+            raise NWException("Could not get Administrative link state.") from exc
         return False
 
     def is_operational_link_up(self):
@@ -305,8 +307,8 @@ class NetworkInterface:
         try:
             if "LOWER_UP" in self._get_interface_details().get("flags"):
                 return True
-        except (NWException, IndexError):
-            raise NWException("Could not get operational link state.")
+        except (NWException, IndexError) as exc:
+            raise NWException("Could not get operational link state.") from exc
         return False
 
     def is_link_up(self):
@@ -350,7 +352,7 @@ class NetworkInterface:
         try:
             return run_command(cmd, self.host)
         except Exception as ex:
-            raise NWException(f"Failed to get hw address: {ex}")
+            raise NWException(f"Failed to get hw address: {ex}") from ex
 
     def get_mtu(self):
         """Return the current MTU value of this interface.
@@ -360,8 +362,8 @@ class NetworkInterface:
         """
         try:
             return self._get_interface_details().get("mtu")
-        except (NWException, IndexError):
-            raise NWException("Could not get MUT value.")
+        except (NWException, IndexError) as exc:
+            raise NWException("Could not get MUT value.") from exc
 
     def ping_check(self, peer_ip, count=2, options=None):
         """This method will try to ping a peer address (IPv4 or IPv6).
@@ -380,7 +382,7 @@ class NetworkInterface:
         try:
             run_command(cmd, self.host)
         except Exception as ex:
-            raise NWException(f"Failed to ping: {ex}")
+            raise NWException(f"Failed to ping: {ex}") from ex
 
     def save(self, ipaddr, netmask):
         """Save current interface IP Address to the system configuration file.
@@ -405,13 +407,13 @@ class NetworkInterface:
             raise NWException(msg)
 
         current_distro = distro_detect()
-        if current_distro.name == "rhel" and current_distro.version == "9":
-            self.distro_is_rhel9 = "rhel9"
+        if current_distro.name == "rhel" and int(current_distro.version) >= 9:
+            self.distro_is_rhel9_or_later = True
 
         filename = f"ifcfg-{self.name}"
         prefix = self.netmask_to_cidr(netmask)
         if current_distro.name in ["rhel", "fedora"]:
-            if self.distro_is_rhel9:
+            if self.distro_is_rhel9_or_later:
                 filename = f"{self.name}.nmconnection"
                 path = "/etc/NetworkManager/system-connections"
             else:
@@ -422,7 +424,7 @@ class NetworkInterface:
             msg = "Distro not supported by API. Could not save ipaddr."
             raise NWException(msg)
 
-        if self.distro_is_rhel9:
+        if self.distro_is_rhel9_or_later:
             ifcfg_dict = ""
             if os.path.exists(f"{path}/{filename}") is False:
                 run_command(
@@ -461,7 +463,7 @@ class NetworkInterface:
 
         if self.if_type == "Bond":
             bond_dict = self._get_bondinterface_details()
-            if self.distro_is_rhel9:
+            if self.distro_is_rhel9_or_later:
                 if os.path.exists(f"{path}/{filename}") is False:
                     run_command(
                         f"nmcli connection add con-name {self.name} ifname {self.name} type ethernet ipv4.address {ipaddr}/{prefix}",
@@ -536,7 +538,7 @@ class NetworkInterface:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
             msg = f"Failed to remove ipaddr. {ex}"
-            raise NWException(msg)
+            raise NWException(msg) from ex
 
     def flush_ipaddr(self):
         """Flush all the IP address for this interface.
@@ -552,7 +554,26 @@ class NetworkInterface:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
             msg = f"Failed to flush ipaddr. {ex}"
-            raise NWException(msg)
+            raise NWException(msg) from ex
+
+    def nm_flush_ipaddr(self):
+        """Remove all the IPv4 address for this interface by using IP tool.
+
+        This method will explicitly identifies all available IP addresses with
+        netmask of interfaces and deletes them.
+
+        You must have sudo permissions to run this method on a host.
+        """
+        cmd = f"nmcli -g ip4.ADDRESS device show {self.name}"
+        ipaddresses = run_command(cmd, self.host, sudo=True).strip().split(" | ")
+        if ipaddresses:
+            try:
+                for ipaddr in ipaddresses:
+                    cmd = f"ip addr delete {ipaddr} dev {self.name}"
+                    run_command(cmd, self.host, sudo=True)
+            except Exception as ex:
+                msg = f"Failed to flush ipaddr. {ex}"
+                raise NWException(msg) from ex
 
     def remove_link(self):
         """Deletes virtual interface link.
@@ -568,7 +589,7 @@ class NetworkInterface:
             run_command(cmd, self.host, sudo=True)
         except Exception as ex:
             msg = f"Failed to delete link. {ex}"
-            raise NWException(msg)
+            raise NWException(msg) from ex
 
     def restore_from_backup(self):
         """Revert interface file from backup.
@@ -682,7 +703,7 @@ class NetworkInterface:
                 else:
                     os.remove(slave_config)
             except Exception as ex:
-                raise NWException(f"Could not restore the config file {ex}")
+                raise NWException(f"Could not restore the config file {ex}") from ex
 
     def are_packets_lost(self, peer_ip, options=None, sudo=False):
         """Check packet loss that occurs during ping.
@@ -706,7 +727,7 @@ class NetworkInterface:
             return True
         except Exception as ex:
             msg = f"Failed to ping. {ex}"
-            raise NWException(msg)
+            raise NWException(msg) from ex
 
     def netmask_to_cidr(self, netmask):
         """Function is used to check the netmask value and convert
@@ -716,7 +737,7 @@ class NetworkInterface:
         255.255.252.0 = 22
 
         :param netmask: Netmask value example 255.255.255.0
-        :return : Returns mask value of given netmask
+        :return: Returns mask value of given netmask
         """
         return sum(bin(int(bits)).count("1") for bits in netmask.split("."))
 
@@ -796,9 +817,9 @@ class NetworkInterface:
         :param int_name: source interface name.
         :param peer_ip: Peer IP address (IPv4 or IPv6)
         :param ping_count: How many ICMP echo packets to send.
-        :return : returns True on successful ping flood.
+        :return: returns True on successful ping flood.
                   returns False on ping flood failure.
-        :rtype : boolean
+        :rtype: boolean
         """
         cmd = f"ping -I {int_name} {peer_ip} -c {ping_count} -f "
         ping_process = subprocess.Popen(
@@ -836,9 +857,9 @@ class NetworkInterface:
                 f"cat /sys/class/net/{self.name}/device/devspec | "
                 f"awk -F/ '{{print $3}}'"
             )
-            interface_type = process.run(cmd, shell=True, ignore_status=True).decode(
-                "utf-8"
-            )
+            interface_type = process.system_output(
+                cmd, shell=True, ignore_status=True
+            ).decode("utf-8")
             cmd = f"echo {interface_type} | sed 's/@/-/' "
             interface_type = process.system_output(
                 cmd, shell=True, ignore_status=True

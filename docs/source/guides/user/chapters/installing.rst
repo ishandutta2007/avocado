@@ -19,7 +19,7 @@ Installing from PyPI
 --------------------
 
 The simplest installation method is through ``pip``.  On most POSIX systems
-with Python 3.7 (or later) and ``pip`` available, installation can be performed
+with Python 3.8 (or later) and ``pip`` available, installation can be performed
 with a single command::
 
   $ pip3 install --user avocado-framework
@@ -41,6 +41,8 @@ the "venv" itself::
   $ pip3 install avocado-framework
 
 
+.. _installing-from-packages:
+
 Installing from packages
 ------------------------
 
@@ -49,35 +51,26 @@ Installing from packages
 Fedora
 ~~~~~~
 
-Avocado modules are available on standard Fedora repos starting with
-version 29.  To subscribe to the latest version stream, run::
+Avocado is available as a standard Fedora package.  Simply run::
 
-  $ dnf module enable avocado:latest
+  $ dnf install python3-avocado
 
-Or, to use the LTS (Long Term Stability) version stream, run::
+The exact version of Avocado is dependent on the Fedora version and
+its release constraints.  If you're looking to have the latest Avocado
+release, please use Avocado's COPR repo, by running::
 
-  $ dnf module enable avocado:103lts
-
-Then proceed to install a module profile or individual packages.  If you're
-unsure about what to do, simply run::
-
-  $ dnf module install avocado
+  $ dnf copr enable @avocado/avocado-latest-release
+  $ dnf install python3-avocado
 
 Enterprise Linux
 ~~~~~~~~~~~~~~~~
 
-Avocado modules are also available on EPEL (Extra Packages for Enterprise Linux)
-repos, starting with version 8.  To enable the EPEL repository, run::
+The latest release of Avocado is available on the same COPR repo
+described previously.  To install the latest Avocado release on
+Enterprise Linux 9, run::
 
-  $ dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-
-Then to enable the module, run::
-
-  $ dnf module enable avocado:latest
-
-And finally, install any number of packages, such as::
-
-  $ dnf install python3-avocado python3-avocado-plugins-output-html python3-avocado-plugins-varianter-yaml-to-mux
+  $ dnf copr enable @avocado/avocado-latest-release
+  $ dnf install python3-avocado
 
 Latest Development RPM Packages from COPR
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -125,19 +118,18 @@ Then to install Avocado from the git repository run::
 
     $ git clone git://github.com/avocado-framework/avocado.git
     $ cd avocado
-    $ python3 setup.py install --user
+    $ pip install . --user
 
-Optionally, to install the plugins run::
+To install an optional plugin run::
 
-    $ python3 setup.py plugin --install=golang --user
-    $ python3 setup.py plugin --install=html --user
-    $ python3 setup.py plugin --install=result_upload --user
-    $ python3 setup.py plugin --install=resultsdb --user
-    $ python3 setup.py plugin --install=robot --user
-    $ python3 setup.py plugin --install=varianter_cit --user
-    $ python3 setup.py plugin --install=varianter_pict --user
-    $ python3 setup.py plugin --install=varianter_yaml_to_mux --user
+    $ pip install optional_plugins/<plugin_name> --user
 
+I.e. for the HTML plugin::
+
+    $ pip install optional_plugins/html --user
+
+Check the directory ``optional_plugins`` for additional features you might be
+interested in.
 
 .. _Virtualization:Tests project in OpenSUSE build service: https://build.opensuse.org/project/show/Virtualization:Tests
 .. _Avocado-VT: https://avocado-vt.readthedocs.io/en/latest/GetStartedGuide.html#installing-avocado-vt

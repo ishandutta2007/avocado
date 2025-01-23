@@ -44,7 +44,7 @@ class StatusRepo:
             overridden = "error"
             message["result"] = overridden
             message["fail_reason"] = (
-                f"Runner error occurred: Test reports " f'unsupported status "{result}"'
+                f'Runner error occurred: Test reports unsupported status "{result}"'
             )
             LOG.error(
                 'Task "%s" finished message with unsupported status '

@@ -22,6 +22,7 @@ from avocado.core.plugin_interfaces import CLICmd
 from avocado.core.resolver import ReferenceResolutionResult
 from avocado.core.settings import settings
 from avocado.core.suite import TestSuite
+from avocado.core.tags import filter_tags_on_runnables
 from avocado.utils.astring import iter_tabular_output
 
 
@@ -37,7 +38,6 @@ def _get_tags_as_string(tags):
 
 
 class List(CLICmd):
-
     """
     Implements the avocado 'list' subcommand
     """
@@ -49,11 +49,17 @@ class List(CLICmd):
     def _prepare_matrix_for_display(matrix, verbose=False):
         colored_matrix = []
         for item in matrix:
-            cls = item[0]
-            type_label = TERM_SUPPORT.healthy_str(cls)
+            kind = item[0]
+            type_label = TERM_SUPPORT.healthy_str(kind)
             if verbose:
                 colored_matrix.append(
-                    (type_label, item[1], _get_tags_as_string(item[2] or {}))
+                    (
+                        type_label,
+                        item[1],
+                        item[2],
+                        item[3],
+                        _get_tags_as_string(item[4] or {}),
+                    )
                 )
             else:
                 colored_matrix.append((type_label, item[1]))
@@ -66,14 +72,12 @@ class List(CLICmd):
             header = (
                 TERM_SUPPORT.header_str("Type"),
                 TERM_SUPPORT.header_str("Test"),
+                TERM_SUPPORT.header_str("Uri"),
+                TERM_SUPPORT.header_str("Resolver"),
                 TERM_SUPPORT.header_str("Tag(s)"),
             )
 
-        # Any kind of color, string format and term specific should be applied
-        # only during output/display phase. So this seems to be a better place
-        # for this:
         matrix = self._prepare_matrix_for_display(matrix, verbose)
-
         for line in iter_tabular_output(matrix, header=header, strip=True):
             LOG_UI.debug(line)
 
@@ -95,6 +99,7 @@ class List(CLICmd):
 
             mapping = {
                 ReferenceResolutionResult.SUCCESS: TERM_SUPPORT.healthy_str,
+                ReferenceResolutionResult.CORRUPT: TERM_SUPPORT.warn_header_str,
                 ReferenceResolutionResult.NOTFOUND: TERM_SUPPORT.fail_header_str,
                 ReferenceResolutionResult.ERROR: TERM_SUPPORT.fail_header_str,
             }
@@ -127,16 +132,42 @@ class List(CLICmd):
 
     @staticmethod
     def _get_resolution_matrix(suite):
-        """Used for resolver."""
+        """Used for resolver.
+
+        :returns: a list of tuples with either (kind, uri, tags) or
+                  (kind, uri) depending on whether verbose mode is on
+        """
         test_matrix = []
         verbose = suite.config.get("core.verbose")
-        for runnable in suite.tests:
+        tags = suite.config.get("filter.by_tags.tags")
+        include_empty = suite.config.get("filter.by_tags.include_empty")
+        include_empty_key = suite.config.get("filter.by_tags.include_empty_key")
 
-            if verbose:
-                tags = runnable.tags or {}
-                test_matrix.append((runnable.kind, runnable.uri, tags))
+        for resolution in suite.resolutions:
+            if resolution.result != ReferenceResolutionResult.SUCCESS:
+                continue
+
+            if tags:
+                runnables = filter_tags_on_runnables(
+                    [resolution], tags, include_empty, include_empty_key
+                )
             else:
-                test_matrix.append((runnable.kind, runnable.uri))
+                runnables = resolution.resolutions
+
+            for runnable in runnables:
+                if verbose:
+                    test_matrix.append(
+                        (
+                            runnable.kind,
+                            runnable.identifier,
+                            runnable.uri,
+                            resolution.origin,
+                            runnable.tags or {},
+                        )
+                    )
+                else:
+                    test_matrix.append((runnable.kind, runnable.identifier))
+
         return test_matrix
 
     @staticmethod
@@ -191,6 +222,21 @@ class List(CLICmd):
             parser=parser,
             positional_arg=True,
             long_arg=None,
+            allow_multiple=True,
+        )
+
+        settings.add_argparser_to_option(
+            namespace="resolver.run_executables",
+            parser=parser,
+            long_arg="--resolver-run-executables",
+            allow_multiple=True,
+        )
+
+        settings.add_argparser_to_option(
+            namespace="resolver.exec_runnables_recipe.arguments",
+            metavar="ARGS",
+            parser=parser,
+            long_arg="--resolver-exec-arguments",
             allow_multiple=True,
         )
 

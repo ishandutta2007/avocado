@@ -222,7 +222,6 @@ def string_to_hex(text):
 
 
 class CommandResult:
-
     """
     A GDB command, its result, and other possible messages
     """
@@ -257,7 +256,6 @@ class CommandResult:
 
 
 class GDB:
-
     """
     Wraps a GDB subprocess for easier manipulation
     """
@@ -286,7 +284,7 @@ class GDB:
             if details.errno == 2:
                 exc = OSError(f"File '{args[0]}' not found")
                 exc.errno = 2
-                raise exc
+                raise exc from details
             else:
                 raise
 
@@ -549,7 +547,6 @@ class GDB:
 
 
 class GDBServer:
-
     """
     Wraps a gdbserver instance
     """
@@ -616,7 +613,7 @@ class GDBServer:
             if details.errno == 2:
                 exc = OSError(f"File '{args[0]}' not found")
                 exc.errno = 2
-                raise exc
+                raise exc from details
             else:
                 raise
 

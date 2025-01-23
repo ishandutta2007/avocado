@@ -22,7 +22,6 @@ log = logging.getLogger("avocado.utils.software_manager")
 
 
 class YumBackend(RpmBackend):
-
     """
     Implements the yum backend for software manager.
 
@@ -245,7 +244,7 @@ class YumBackend(RpmBackend):
 
         :param name: name of the package
         :param dest_path: destination_path
-        :param  build_option : rpmbuild option
+        :param  build_option: rpmbuild option
 
         :return final_dir: path of ready-to-build directory
         """

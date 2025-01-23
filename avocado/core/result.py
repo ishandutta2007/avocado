@@ -19,7 +19,6 @@ Contains the Result class, used for result accounting.
 
 
 class Result:
-
     """
     Result class, holder for job (and its tests) result information.
     """
@@ -101,7 +100,8 @@ class Result:
         """
         Called once for a test to check status and report.
 
-        :param test: A dict with test internal state
+        :param state: result of :class:`avocado.core.test.Test.get_state`.
+        :type state: dict
         """
         status = state.get("status")
         if status == "PASS":

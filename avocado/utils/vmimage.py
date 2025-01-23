@@ -16,6 +16,7 @@
 Provides VM images acquired from official repositories
 """
 
+import logging
 import os
 import re
 import tempfile
@@ -28,6 +29,8 @@ from urllib.request import urlopen
 from avocado.utils import archive, asset, astring
 from avocado.utils import path as utils_path
 from avocado.utils import process
+
+LOG = logging.getLogger(__name__)
 
 # pylint: disable=C0401
 #: The "qemu-img" binary used when creating the snapshot images.  If
@@ -113,8 +116,8 @@ class ImageProviderBase:
         try:
             data = urlopen(url).read()
             parser.feed(astring.to_text(data, self.HTML_ENCODING))
-        except HTTPError:
-            raise ImageProviderError(f"Cannot open {self.url_versions}")
+        except HTTPError as exc:
+            raise ImageProviderError(f"Cannot open {url}") from exc
 
     @staticmethod
     def get_best_version(versions):
@@ -212,7 +215,7 @@ class FedoraImageProviderBase(ImageProviderBase):
         else:
             cloud = "CloudImages"
 
-        if self.url_old_images and int(self.version) <= 35:
+        if self.url_old_images and int(self.version) <= 38:
             self.url_versions = self.url_old_images
 
         self.url_images = self.url_versions + "{version}/" + cloud + "/{arch}/images/"
@@ -232,7 +235,10 @@ class FedoraImageProvider(FedoraImageProviderBase):
         self.url_old_images = (
             "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/"
         )
-        self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        if int(self.version) >= 40:
+            self.image_pattern = "Fedora-Cloud-Base-Generic-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        else:
+            self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
 
 
 class FedoraSecondaryImageProvider(FedoraImageProviderBase):
@@ -251,7 +257,10 @@ class FedoraSecondaryImageProvider(FedoraImageProviderBase):
         self.url_old_images = (
             "https://archives.fedoraproject.org/pub/archive/fedora-secondary/releases/"
         )
-        self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        if int(self.version) >= 40:
+            self.image_pattern = "Fedora-Cloud-Base-Generic-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        else:
+            self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
 
 
 class CentOSImageProvider(ImageProviderBase):
@@ -582,6 +591,7 @@ class Image:
             cache_dirs = [self.cache_dir]
         else:
             cache_dirs = self.cache_dir
+        LOG.debug("Attempting to download image from URL: %s", self.url)
         asset_path = asset.Asset(
             name=self.url,
             asset_hash=self.checksum,
@@ -654,6 +664,9 @@ class Image:
         :returns: Image instance that can provide the image
                   according to the parameters.
         """
+        # Use the current system architecture if arch is not provided
+        if arch is None:
+            arch = DEFAULT_ARCH
         provider = get_best_provider(name, version, build, arch)
 
         if cache_dir is None:
@@ -670,8 +683,8 @@ class Image:
                 cache_dir=cache_dir,
                 snapshot_dir=snapshot_dir,
             )
-        except ImageProviderError:
-            pass
+        except ImageProviderError as e:
+            LOG.debug(e)
 
         raise AttributeError("Provider not available")
 
@@ -726,9 +739,10 @@ def get_best_provider(name=None, version=None, build=None, arch=None):
         if name is None or name == provider.name.lower():
             try:
                 return provider(**provider_args)
-            except ImageProviderError:
-                pass
+            except ImageProviderError as e:
+                LOG.debug(e)
 
+    LOG.debug("Provider for %s not available", name)
     raise AttributeError("Provider not available")
 
 

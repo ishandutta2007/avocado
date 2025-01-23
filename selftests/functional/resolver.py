@@ -1,3 +1,5 @@
+import glob
+import json
 import os
 import stat
 import unittest
@@ -8,7 +10,13 @@ from avocado.utils import process, script
 # is also the same
 from selftests.functional.list import AVOCADO_TEST_OK as AVOCADO_INSTRUMENTED_TEST
 from selftests.functional.list import EXEC_TEST
-from selftests.utils import AVOCADO, BASEDIR
+from selftests.utils import (
+    AVOCADO,
+    BASEDIR,
+    TestCaseTmpDir,
+    python_module_available,
+    skipUnlessPathExists,
+)
 
 
 class ResolverFunctional(unittest.TestCase):
@@ -105,6 +113,152 @@ class ResolverFunctional(unittest.TestCase):
             "examples/tests/skip_conditional.py:NonBareMetal.test_bare_metal", lines[7]
         )
         self.assertEqual("avocado-instrumented: 10", lines[-1])
+
+    @unittest.skipUnless(
+        python_module_available("magic"), "avocado-magic not available"
+    )
+    def test_corrupted_reference(self):
+        cmd_line = f"{AVOCADO} list magic:foo"
+        result = process.run(cmd_line)
+        self.assertIn(
+            "Reference magic:foo might be resolved by magic resolver, but the file is corrupted:",
+            result.stderr_text,
+        )
+        cmd_line = f"{AVOCADO} run magic:foo"
+        result = process.run(cmd_line, ignore_status=True)
+        self.assertIn(
+            "Reference magic:foo might be resolved by magic resolver, but the file is corrupted:",
+            result.stderr_text,
+        )
+
+    def test_runnable_recipe(self):
+        test_path = os.path.join(
+            BASEDIR,
+            "examples",
+            "nrunner",
+            "recipes",
+            "runnable",
+            "exec_test_echo_no_newline.json",
+        )
+        cmd_line = f"{AVOCADO} list {test_path}"
+        result = process.run(cmd_line)
+        self.assertEqual(
+            b"exec-test /bin/echo\n",
+            result.stdout,
+        )
+
+    def test_runnable_recipe_origin(self):
+        test_path = os.path.join(
+            BASEDIR,
+            "examples",
+            "nrunner",
+            "recipes",
+            "runnable",
+            "python_unittest.json",
+        )
+        cmd_line = f"{AVOCADO} -V list {test_path}"
+        result = process.run(cmd_line)
+        self.assertIn(
+            b"python-unittest selftests/unit/test.py:TestClassTestUnit.test_long_name selftests/unit/test.py:TestClassTestUnit.test_long_name runnable-recipe\n",
+            result.stdout,
+        )
+
+    @skipUnlessPathExists("/bin/sh")
+    def test_exec_runnable_recipe_disabled(self):
+        resolver_path = os.path.join(
+            BASEDIR,
+            "examples",
+            "nrunner",
+            "resolvers",
+            "exec_runnables_recipe.sh",
+        )
+        cmd_line = f"{AVOCADO} -V list {resolver_path}"
+        result = process.run(cmd_line)
+        self.assertIn(
+            b"examples/nrunner/resolvers/exec_runnables_recipe.sh exec-test",
+            result.stdout,
+        )
+        self.assertIn(b"exec-test: 1\n", result.stdout)
+
+    @skipUnlessPathExists("/bin/sh")
+    def test_exec_runnable_recipe_enabled(self):
+        resolver_path = os.path.join(
+            BASEDIR,
+            "examples",
+            "nrunner",
+            "resolvers",
+            "exec_runnables_recipe.sh",
+        )
+        cmd_line = f"{AVOCADO} -V list --resolver-run-executables {resolver_path}"
+        result = process.run(cmd_line)
+        self.assertIn(
+            b"exec-test true-test  /bin/true  exec-runnables-recipe",
+            result.stdout,
+        )
+        self.assertIn(
+            b"exec-test false-test /bin/false exec-runnables-recipe",
+            result.stdout,
+        )
+        self.assertIn(b"exec-test: 2\n", result.stdout)
+
+    @skipUnlessPathExists("/bin/sh")
+    def test_exec_runnable_recipe_args(self):
+        resolver_path = os.path.join(
+            BASEDIR,
+            "examples",
+            "nrunner",
+            "resolvers",
+            "exec_runnables_recipe_kind.sh",
+        )
+        cmd_line = f"{AVOCADO} -V list --resolver-run-executables --resolver-exec-arguments tap {resolver_path}"
+        result = process.run(cmd_line)
+        self.assertIn(
+            b"tap  true-test  /bin/true  exec-runnables-recipe",
+            result.stdout,
+        )
+        self.assertIn(
+            b"tap  false-test /bin/false exec-runnables-recipe",
+            result.stdout,
+        )
+        self.assertIn(b"tap: 2\n", result.stdout)
+
+
+class ResolverFunctionalTmp(TestCaseTmpDir):
+    def test_runnables_recipe(self):
+        all_runnable_recipes = glob.glob(
+            os.path.join(
+                BASEDIR, "examples", "nrunner", "recipes", "runnable", "*.json"
+            )
+        )
+        result = []
+        for runnable_recipe_path in all_runnable_recipes:
+            with open(
+                runnable_recipe_path, "r", encoding="utf-8"
+            ) as runnable_recipe_file:
+                runnable_recipe = json.load(runnable_recipe_file)
+                result.append(runnable_recipe)
+
+        runnables_recipe_path = os.path.join(self.tmpdir.name, "runnables-recipe.json")
+        with open(
+            runnables_recipe_path, "w", encoding="utf-8"
+        ) as runnables_recipe_file:
+            json.dump(result, runnables_recipe_file)
+
+        exp = b"""TEST TYPES SUMMARY
+==================
+asset: 1
+exec-test: 3
+noop: 3
+package: 1
+pip: 1
+python-unittest: 1
+sysinfo: 1"""
+        cmd_line = f"{AVOCADO} -V list {runnables_recipe_path}"
+        result = process.run(cmd_line)
+        self.assertIn(
+            exp,
+            result.stdout,
+        )
 
 
 if __name__ == "__main__":

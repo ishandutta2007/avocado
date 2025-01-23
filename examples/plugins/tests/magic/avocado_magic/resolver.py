@@ -17,8 +17,9 @@ Test resolver for magic test words
 """
 
 from avocado.core.nrunner.runnable import Runnable
-from avocado.core.plugin_interfaces import Discoverer, Resolver
+from avocado.core.plugin_interfaces import Discoverer, Init, Resolver
 from avocado.core.resolver import ReferenceResolution, ReferenceResolutionResult
+from avocado.core.settings import settings
 
 VALID_MAGIC_WORDS = ["pass", "fail"]
 
@@ -30,15 +31,42 @@ class MagicResolver(Resolver):
 
     @staticmethod
     def resolve(reference):  # pylint: disable=W0221
-        if reference not in VALID_MAGIC_WORDS:
+        try:
+            key_word, magic_word = reference.split(":", 1)
+        except ValueError:
+            key_word = None
+            magic_word = reference
+        if key_word != "magic":
             return ReferenceResolution(
                 reference,
                 ReferenceResolutionResult.NOTFOUND,
                 info=f'Word "{reference}" is not a valid magic word',
             )
 
+        if magic_word not in VALID_MAGIC_WORDS:
+            return ReferenceResolution(
+                reference,
+                ReferenceResolutionResult.CORRUPT,
+                [Runnable("magic", reference)],
+                info=f'Word "{reference}" is magic type but the {magic_word} is not a valid magic word',
+            )
+
         return ReferenceResolution(
             reference, ReferenceResolutionResult.SUCCESS, [Runnable("magic", reference)]
+        )
+
+
+class MagicInit(Init):
+
+    description = "Initialization for magic words plugin"
+
+    def initialize(self):
+        settings.register_option(
+            section="examples.plugins.magic.discover",
+            key="enabled",
+            key_type=bool,
+            help_msg="Whether to enable the discovery of pass and fail",
+            default=False,
         )
 
 
@@ -47,9 +75,9 @@ class MagicDiscoverer(Discoverer):
     name = "magic-discoverer"
     description = "Test discoverer for magic words"
 
-    @staticmethod
-    def discover():  # pylint: disable=W0221
+    def discover(self):  # pylint: disable=W0221
         resolutions = []
-        for reference in VALID_MAGIC_WORDS:
-            resolutions.append(MagicResolver.resolve(reference))
+        if self.config.get("examples.plugins.magic.discover.enabled"):
+            for reference in VALID_MAGIC_WORDS:
+                resolutions.append(MagicResolver.resolve(reference))
         return resolutions

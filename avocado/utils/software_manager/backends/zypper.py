@@ -9,7 +9,6 @@ log = logging.getLogger("avocado.utils.software_manager")
 
 
 class ZypperBackend(RpmBackend):
-
     """
     Implements the zypper backend for software manager.
 
@@ -174,7 +173,7 @@ class ZypperBackend(RpmBackend):
 
         :param name: name of the package
         :param dest_path: destination_path
-        :param  build_option : rpmbuild option
+        :param  build_option: rpmbuild option
 
         :return final_dir: path of ready-to-build directory
         """

@@ -53,8 +53,8 @@ def geometric_mean(values):
     """
     try:
         values = [int(value) for value in values]
-    except ValueError:
-        raise ValueError(f"Invalid inputs {values}. Provide valid inputs")
+    except ValueError as exc:
+        raise ValueError(f"Invalid inputs {values}. Provide valid inputs") from exc
     no_values = len(values)
     if no_values == 0:
         return None
@@ -136,13 +136,12 @@ def comma_separated_ranges_to_list(string):
     :return list: list of integer values in comma separated range
     """
     values = []
-    for value in string.split(","):
-        if "-" in value:
-            start, end = value.split("-")
-            for val in range(int(start), int(end) + 1):
-                values.append(int(val))
+    for range_str in string.split(","):
+        if "-" in range_str:
+            start, end = range_str.split("-")
+            values.extend(range(int(start), int(end) + 1))
         else:
-            values.append(int(value))
+            values.append(int(range_str))
     return values
 
 
@@ -183,7 +182,6 @@ def recursive_compare_dict(dict1, dict2, level="DictKey", diff_btw_dict=None):
 
 
 class Borg:
-
     """
     Multiple instances of this class will share the same state.
 
@@ -201,7 +199,6 @@ class Borg:
 
 
 class LazyProperty:
-
     """
     Lazily instantiated property.
 
@@ -225,7 +222,6 @@ class LazyProperty:
 
 
 class CallbackRegister:
-
     """
     Registers pickable functions to be executed later.
     """
@@ -297,12 +293,12 @@ def time_to_seconds(time):
                 seconds = int(time[:-1]) * mult
             else:
                 seconds = int(time)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
             raise ValueError(
                 f"Invalid value '{time}' for time. Use a string "
                 f"with the number and optionally the time unit "
                 f"(s, m, h or d)."
-            )
+            ) from exc
     else:
         seconds = 0
     return seconds
@@ -343,10 +339,10 @@ class DataSize:
             if self._value < 0:
                 raise ValueError
 
-        except ValueError:
+        except ValueError as exc:
             raise InvalidDataSize(
                 'String not in size + unit format (i.e. "10M", "100k", ...)'
-            )
+            ) from exc
 
     @property
     def value(self):

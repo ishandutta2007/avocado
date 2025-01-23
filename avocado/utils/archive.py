@@ -116,7 +116,13 @@ def is_zstd_file(path):
         return zstd_file.read(len(ZSTD_MAGIC)) == ZSTD_MAGIC
 
 
-def _probe_zstd_cmd():
+def probe_zstd_cmd():
+    """
+    Attempts to find a suitable zstd tool that behaves as expected
+
+    :rtype: str or None
+    :returns: path to a suitable zstd executable or None if not found
+    """
     zstd_cmd = shutil.which("zstd")
     if zstd_cmd is not None:
         proc = subprocess.run(
@@ -136,7 +142,7 @@ def zstd_uncompress(path, output_path=None, force=False):
     """
     Extracts a zstd compressed file.
     """
-    zstd_cmd = _probe_zstd_cmd()
+    zstd_cmd = probe_zstd_cmd()
     if not zstd_cmd:
         raise ArchiveException("Unable to find a suitable zstd compression tool")
     output_path = _decide_on_path(path, ".zst", output_path)
@@ -162,7 +168,6 @@ class ArchiveException(Exception):
 
 
 class ArchiveFile:
-
     """
     Class that represents an Archive file.
 
@@ -292,7 +297,7 @@ class ArchiveFile:
                     os.remove(dst)
                     os.symlink(src, dst)
                 except Exception as e:
-                    LOG.warning(f"Failed to update symlink '{dst}': {str(e)}")
+                    LOG.warning("Failed to update symlink '%s': %s", dst, e)
                     continue
                 continue  # Don't override any other attributes on links
             mode = attr & 511  # Mask only permissions
@@ -300,7 +305,7 @@ class ArchiveFile:
                 try:
                     os.chmod(dst, mode)
                 except Exception as e:
-                    LOG.warning(f"Failed to update permissions for '{dst}': {str(e)}")
+                    LOG.warning("Failed to update permissions for '%s'", e)
 
     def close(self):
         """

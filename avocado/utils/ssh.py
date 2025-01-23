@@ -11,6 +11,7 @@ Example of use:
         if result.exit_status == 0:
             print(result.stdout_text)
 """
+
 import os
 import shlex
 import stat
@@ -282,4 +283,4 @@ class Session:
             result = process.run(f"{cmd} {options}", ignore_status=True)
             return result.exit_status == 0
         except process.CmdError as exc:
-            raise NWException(f"failed to copy file {exc}")
+            raise NWException(f"failed to copy file {exc}") from exc

@@ -18,10 +18,12 @@ Test resolver module.
 
 import glob
 import os
+import stat
 from enum import Enum
 
 from avocado.core.enabled_extension_manager import EnabledExtensionManager
 from avocado.core.exceptions import JobTestSuiteReferenceResolutionError
+from avocado.core.output import LOG_UI
 
 
 class ReferenceResolutionAssetType(Enum):
@@ -38,6 +40,8 @@ class ReferenceResolutionAssetType(Enum):
 class ReferenceResolutionResult(Enum):
     #: Given test reference was properly resolved
     SUCCESS = object()
+    #: Given test reference might be resolved, but it is corrupted.
+    CORRUPT = object()
     #: Given test reference was not properly resolved
     NOTFOUND = object()
     #: Internal error in the resolution process
@@ -52,7 +56,6 @@ class ReferenceResolutionAction(Enum):
 
 
 class ReferenceResolution:
-
     """
     Represents one complete reference resolution
 
@@ -96,7 +99,6 @@ class ReferenceResolution:
 
 
 class Resolver(EnabledExtensionManager):
-
     """
     Main test reference resolution utility.
 
@@ -108,6 +110,7 @@ class Resolver(EnabledExtensionManager):
 
     DEFAULT_POLICY = {
         ReferenceResolutionResult.SUCCESS: ReferenceResolutionAction.RETURN,
+        ReferenceResolutionResult.CORRUPT: ReferenceResolutionAction.RETURN,
         ReferenceResolutionResult.NOTFOUND: ReferenceResolutionAction.CONTINUE,
         ReferenceResolutionResult.ERROR: ReferenceResolutionAction.CONTINUE,
     }
@@ -139,7 +142,6 @@ class Resolver(EnabledExtensionManager):
 
 
 class Discoverer(EnabledExtensionManager):
-
     """
     Secondary test reference resolution utility.
 
@@ -185,7 +187,7 @@ def check_file(
             return ReferenceResolution(
                 reference,
                 ReferenceResolutionResult.NOTFOUND,
-                info=f'File "{path}" does not end with "{suffix}"',
+                info=f'File name "{path}" does not end with suffix "{suffix}"',
             )
 
     if not type_check(path):
@@ -195,11 +197,32 @@ def check_file(
             info=f'File "{path}" does not exist or is not a {type_name}',
         )
 
-    if not os.access(path, access_check):
+    st = os.stat(path)
+
+    user_permissions = st.st_mode & (stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+    # Initialize required permissions to 0, indicating no permissions are needed yet
+    required_permissions = 0
+
+    # Build the required permissions based on access_check
+    if access_check & os.R_OK:
+        # If read access needs to be checked, set the corresponding user read permission bit
+        required_permissions |= stat.S_IRUSR
+    if access_check & os.W_OK:
+        # If write access needs to be checked, set the corresponding user write permission bit
+        required_permissions |= stat.S_IWUSR
+    if access_check & os.X_OK:
+        # If execute access needs to be checked, set the corresponding user execute permission bit
+        required_permissions |= stat.S_IXUSR
+
+    # Check if the user has the required permissions
+    if (user_permissions & required_permissions) != required_permissions:
+        # If the bitwise AND of user permissions and required permissions is not equal to required permissions,
+        # it means the user is missing some permissions
         return ReferenceResolution(
             reference,
             ReferenceResolutionResult.NOTFOUND,
-            info=f'File "{path}" does not exist or is not {access_name}',
+            info=f'File "{path}" does not have the required {access_name} permissions',
         )
 
     return True
@@ -238,12 +261,10 @@ def _extend_directory(path):
 
 def resolve(references, hint=None, ignore_missing=True, config=None):
     resolutions = []
-    hint_resolutions = []
     hint_references = {}
 
     if hint:
-        hint_resolutions = hint.get_resolutions()
-        hint_references = {r.reference: r for r in hint_resolutions}
+        hint_references = {r.reference: r for r in hint.get_resolutions()}
 
     if not references and hint_references:
         references = list(hint_references.keys())
@@ -267,6 +288,14 @@ def resolve(references, hint=None, ignore_missing=True, config=None):
         discoverer = Discoverer(config)
         resolutions.extend(discoverer.discover())
 
+    for res in resolutions:
+        if res.result == ReferenceResolutionResult.CORRUPT:
+            LOG_UI.warning(
+                "Reference %s might be resolved by %s resolver, but the file is corrupted: %s",
+                res.reference,
+                res.origin,
+                res.info or "",
+            )
     # This came up from a previous method and can be refactored to improve
     # performance since that we could merge with the loop above.
     if not ignore_missing:

@@ -13,7 +13,7 @@
 # Authors: Cleber Rosa <crosa@redhat.com>
 
 """
-NRunner based implementation of job compliant runner
+nrunner based implementation of job compliant runner
 """
 
 import asyncio
@@ -26,7 +26,6 @@ import tempfile
 from avocado.core.dispatcher import SpawnerDispatcher
 from avocado.core.exceptions import JobError, JobFailFast
 from avocado.core.messages import MessageHandler
-from avocado.core.nrunner.runnable import Runnable
 from avocado.core.nrunner.runner import check_runnables_runner_requirements
 from avocado.core.output import LOG_JOB
 from avocado.core.plugin_interfaces import CLI, Init, SuiteRunner
@@ -87,8 +86,8 @@ class RunnerInit(Init):
             "URI for connecting to the status server, usually "
             'a "HOST:PORT" string. Use this if your status server '
             "is in another host, or different port. This is only "
-            'effective if "status_server_auto" is disabled'
-            'If "status_server_listen" is not set. Value from "status_server_uri" '
+            'effective if "status_server_auto" is disabled. '
+            'If "status_server_listen" is not set, the value from "status_server_uri" '
             "will be used."
         )
         settings.register_option(
@@ -212,18 +211,6 @@ class Runner(SuiteRunner):
         super().__init__()
         self.status_server_dir = None
 
-    @staticmethod
-    def _update_avocado_configuration_used_on_runnables(runnables, config):
-        """Updates the config used on runnables with this suite's config values
-
-        :param runnables: the tasks whose runner requirements will be checked
-        :type runnables: list of :class:`Runnable`
-        :param config: A config dict to be used on the desired test suite.
-        :type config: dict
-        """
-        for runnable in runnables:
-            runnable.config = Runnable.filter_runnable_config(runnable.kind, config)
-
     def _determine_status_server(self, test_suite, config_key):
         if test_suite.config.get("run.status_server_auto"):
             # no UNIX domain sockets on Windows
@@ -289,12 +276,18 @@ class Runner(SuiteRunner):
             job.interrupted_reason = f"Suite {test_suite.name} is disabled."
             return summary
 
+        spawner_name = test_suite.config.get("run.spawner")
+        spawner = SpawnerDispatcher(test_suite.config, job)[spawner_name].obj
+        if not spawner.is_operational():
+            suite_name = f" {test_suite.name}" if test_suite.name else ""
+            msg = f'Spawner "{spawner_name}" is not operational, aborting execution of suite {suite_name}. Please check the logs for more information.'
+            LOG_JOB.error(msg)
+            job.interrupted_reason = msg
+            summary.add("INTERRUPTED")
+            return summary
+
         test_suite.tests, missing_requirements = check_runnables_runner_requirements(
             test_suite.tests
-        )
-
-        self._update_avocado_configuration_used_on_runnables(
-            test_suite.tests, test_suite.config
         )
 
         self._abort_if_missing_runners(missing_requirements)
@@ -325,8 +318,6 @@ class Runner(SuiteRunner):
             if rt.task.category == "test"
         ]
         self.tsm = TaskStateMachine(self.runtime_tasks, self.status_repo)
-        spawner_name = test_suite.config.get("run.spawner")
-        spawner = SpawnerDispatcher(test_suite.config, job)[spawner_name].obj
         max_running = min(
             test_suite.config.get("run.max_parallel_tasks"), len(self.runtime_tasks)
         )

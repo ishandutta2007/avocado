@@ -2,6 +2,7 @@ import glob
 import os
 
 from avocado import Test
+from avocado.core import exit_codes
 from avocado.core.job import Job
 from avocado.utils import process, script
 from selftests.utils import AVOCADO, BASEDIR
@@ -29,7 +30,7 @@ class PassTest(Test):
 class PodmanSpawnerTest(Test):
     """
     :avocado: dependency={"type": "package", "name": "podman", "action": "check"}
-    :avocado: dependency={"type": "podman-image", "uri": "registry.fedoraproject.org/fedora:36"}
+    :avocado: dependency={"type": "podman-image", "uri": "registry.fedoraproject.org/fedora:38"}
     """
 
     def test_avocado_instrumented(self):
@@ -41,7 +42,7 @@ class PodmanSpawnerTest(Test):
                 f"{AVOCADO} run "
                 f"--job-results-dir {self.workdir} "
                 f"--disable-sysinfo --spawner=podman "
-                f"--spawner-podman-image=fedora:36 -- "
+                f"--spawner-podman-image=fedora:38 -- "
                 f"{test}",
                 ignore_status=True,
             )
@@ -54,7 +55,7 @@ class PodmanSpawnerTest(Test):
             f"{AVOCADO} run "
             f"--job-results-dir {self.workdir} "
             f"--disable-sysinfo --spawner=podman "
-            f"--spawner-podman-image=fedora:36 -- "
+            f"--spawner-podman-image=fedora:38 -- "
             f"/bin/true",
             ignore_status=True,
         )
@@ -72,7 +73,7 @@ class PodmanSpawnerTest(Test):
                 "run.results_dir": self.workdir,
                 "task.timeout.running": 2,
                 "run.spawner": "podman",
-                "spawner.podman.image": "fedora:36",
+                "spawner.podman.image": "fedora:38",
             }
 
             with Job.from_config(job_config=config) as job:
@@ -92,7 +93,7 @@ class PodmanSpawnerTest(Test):
             ],
             "run.results_dir": self.workdir,
             "run.spawner": "podman",
-            "spawner.podman.image": "fedora:36",
+            "spawner.podman.image": "fedora:38",
         }
 
         with Job.from_config(job_config=config) as job:
@@ -109,10 +110,25 @@ class PodmanSpawnerTest(Test):
             f"{AVOCADO} run "
             f"--job-results-dir {self.workdir} "
             f"--disable-sysinfo --spawner=podman "
-            f"--spawner-podman-image=fedora:36 -- "
+            f"--spawner-podman-image=fedora:38 -- "
             f"{test}",
             ignore_status=True,
         )
         self.assertEqual(result.exit_status, 0)
         self.assertIn("use_data.sh: STARTED", result.stdout_text)
         self.assertIn("use_data.sh:  PASS", result.stdout_text)
+
+
+class OperationalTest(Test):
+    def test_not_operational(self):
+        fake_podman_bin = os.path.join(BASEDIR, "examples", "tests", "false")
+        result = process.run(
+            f"{AVOCADO} run "
+            f"--job-results-dir {self.workdir} "
+            f"--disable-sysinfo --spawner=podman "
+            f"--spawner-podman-bin={fake_podman_bin} "
+            f"-- examples/tests/true",
+            ignore_status=True,
+        )
+        self.assertEqual(result.exit_status, exit_codes.AVOCADO_JOB_INTERRUPTED)
+        self.assertIn('Spawner "podman" is not operational', result.stderr_text)

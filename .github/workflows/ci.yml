@@ -15,10 +15,11 @@ jobs:
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
       - name: Allow git to operate on directory checked out by GH Actions
         run: git config --global --add safe.directory `pwd`
       - name: Installing Avocado development dependencies
@@ -31,7 +32,7 @@ jobs:
         run: python3 setup.py test --select=static-checks
       - name: Archive failed tests logs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: static-checks-logs
           path: /home/runner/avocado/job-results/
@@ -45,19 +46,21 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10.0, 3.11]
+        python-version: [3.8, 3.9, 3.10.0, 3.11, 3.12.0, 3.13.0]
       fail-fast: false
 
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install setuptools on Python >= 3.12
+        run: python3 -c 'import setuptools' || python3 -m pip install setuptools
       - name: Avocado smokecheck
         run: make smokecheck
 
@@ -69,23 +72,25 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10.0, 3.11]
+        python-version: [3.8, 3.9, 3.10.0, 3.11, 3.12.0, 3.13.0]
       fail-fast: false
 
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -V --version
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Install setuptools on Python >= 3.12
+        run: python3 -c 'import setuptools' || python3 -m pip install setuptools
       - name: Installing Avocado in develop mode
         run: python3 setup.py develop --user
       - name: Avocado version
@@ -94,44 +99,13 @@ jobs:
         run: python3 setup.py test --skip=static-checks
       - name: Archive failed tests logs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-logs-${{ matrix.python-version }}
           path: /home/runner/avocado/job-results/
           retention-days: 1
       - run: echo "🥑 This job's status is ${{ job.status }}."
 
-  code-coverage:
-
-    name: Code Coverage
-    runs-on: ubuntu-20.04
-
-    strategy:
-      matrix:
-        python-version: [3.11]
-    env:
-      CC_TEST_REPORTER_ID: "387887b88a76f31c2c376219fc749689ea5975c8fe7fcd9609f1dcc139e053a6"
-
-    steps:
-      - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
-      - name: Check out repository code
-        uses: actions/checkout@v3
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: |
-         pip install -r requirements-dev.txt
-         curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
-         chmod +x ./cc-test-reporter
-      - name: Run pre script
-        run: ./cc-test-reporter before-build
-      - name: Run script
-        run: make develop && ./selftests/run_coverage
-      - name: Run post script
-        run: ./cc-test-reporter after-build
-      - run: echo "🥑 This job's status is ${{ job.status }}."
 
 
 # macOS check on latest Python
@@ -139,7 +113,7 @@ jobs:
   check-macos:
 
     name: macOS with Python ${{ matrix.python-version }}
-    runs-on: macos-12
+    runs-on: macos-14
 
     strategy:
       matrix:
@@ -148,9 +122,9 @@ jobs:
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -179,18 +153,20 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.9, 3.10.0, 3.11]
+        python-version: [3.9, 3.10.0, 3.11, 3.12.0, 3.13.0]
 
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -V --version
+      - name: Install setuptools on Python >= 3.12
+        run: python -c 'import setuptools' || python -m pip install setuptools
       - name: Install avocado
         run: python setup.py develop --user
       - name: Show avocado help
@@ -208,19 +184,21 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10.0, 3.11]
+        python-version: [3.8, 3.9, 3.10.0, 3.11, 3.12.0, 3.13.0]
       fail-fast: false
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install setuptools on Python >= 3.12
+      run: python3 -c 'import setuptools' || python3 -m pip install setuptools
     - name: Build tarballs and wheels
       run: make -f Makefile.gh build-wheel check-wheel
     - name: Save tarballs and wheels as artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: tarballs_and_wheels-${{ matrix.python-version }}
         path: ${{github.workspace}}/PYPI_UPLOAD/
@@ -233,19 +211,21 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10.0, 3.11]
+        python-version: [3.8, 3.9, 3.10.0, 3.11, 3.12.0, 3.13.0]
       fail-fast: false
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install setuptools on Python >= 3.12
+      run: python3 -c 'import setuptools' || python3 -m pip install setuptools
     - name: Build eggs
       run: make -f Makefile.gh build-egg
     - name: Save eggs as artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: eggs-${{ matrix.python-version }}
         path: ${{github.workspace}}/EGG_UPLOAD/
@@ -258,7 +238,7 @@ jobs:
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Run Codespell Check
@@ -267,75 +247,216 @@ jobs:
         run: make -f Makefile.gh bandit
         continue-on-error: True
       - name: Save bandit output as artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bandit-results
           path: /home/runner/work/avocado/avocado/bandit-output.txt
           retention-days: 1
       - run: echo "🥑 This job's status is ${{ job.status }}."
 
+  version_task_fedora_37:
 
-  version_task:
-
-    name: Version task (${{ matrix.container }})
+    name: Version task fedora:37
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        container: ["fedora:37",
-                    "fedora:38",
-                    "registry.access.redhat.com/ubi8/ubi:8.8",
-                    "registry.access.redhat.com/ubi9/ubi:9.2",
-                    "debian:10.10",
-                    "debian:11.0",
-                    "ubuntu:21.10",
-                    "ubuntu:20.04"]
+    container:
+      image: fedora:37
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_fedora_38:
+
+    name: Version task fedora:38
+    runs-on: ubuntu-20.04
+    container:
+      image: fedora:38
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_ubi_8:
+
+    name: Version task ubi:8.8
+    runs-on: ubuntu-20.04
+    container:
+      image: registry.access.redhat.com/ubi8/ubi:8.8
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python3.11 python3.11-setuptools python3.11-setuptools-rust
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_ubi_9:
+
+    name: Version task ubi:9.2
+    runs-on: ubuntu-20.04
+    container:
+      image: registry.access.redhat.com/ubi9/ubi:9.2
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
-      - name: Install and run avocado --version
-        run: |
-         if ! command -v dnf &> /dev/null
-         then
-           python3 -c 'import setuptools' || dnf -y install python3 python3-setuptools
-         else
-           python3 --version || (apt update && apt -y install python3 python3-setuptools ca-certificates)
-         fi
-         python3 setup.py develop --user
-         python3 -m avocado --version
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
 
+  version_task_debian_12:
 
-  egg_task:
-
-    name: Egg task (${{ matrix.container }})
+    name: Version task debian:12.4
     runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        container: ["fedora:37",
-                    "fedora:38",
-                    "registry.access.redhat.com/ubi8/ubi:8.8",
-                    "registry.access.redhat.com/ubi9/ubi:9.2",
-                    "debian:10.10",
-                    "debian:11.0",
-                    "ubuntu:21.10",
-                    "ubuntu:20.04"]
+    container:
+      image: debian:12.4
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_debian_11:
+
+    name: Version task debian:11.0
+    runs-on: ubuntu-20.04
+    container:
+      image: debian:11.0
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_ubuntu_22:
+
+    name: Version task ubuntu:22.04
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools ca-certificates
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  version_task_ubuntu_20:
+
+    name: Version task ubuntu:20.04
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:20.04
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools ca-certificates
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/version
+
+  egg_task_fedora_37:
+
+    name: Egg task fedora:37
+    runs-on: ubuntu-20.04
+    container:
+      image: fedora:37
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_fedora_38:
+
+    name: Egg task fedora:38
+    runs-on: ubuntu-20.04
+    container:
+      image: fedora:38
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_ubi_8:
+
+    name: Egg task ubi:8.8
+    runs-on: ubuntu-20.04
+    container:
+      image: registry.access.redhat.com/ubi8/ubi:8.8
+    steps:
+      - name: Install Python dependencies
+        run: dnf -y install python38 python38-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_ubi_9:
+
+    name: Egg task ubi:9.2
+    runs-on: ubuntu-20.04
+    container:
+      image: registry.access.redhat.com/ubi9/ubi:9.2
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
-      - name: Test running avocado from eggs
-        run: |
-         if ! command -v dnf &> /dev/null
-         then
-           python3 -c 'import setuptools' || dnf -y install python3 python3-setuptools
-         else
-           python3 --version || (apt update && apt -y install python3 python3-setuptools)
-         fi
-         python3 setup.py bdist_egg
-         mv dist/avocado_framework-*egg /tmp
-         python3 setup.py clean --all
-         python3 -c 'import sys; import glob; sys.path.insert(0, glob.glob("/tmp/avocado_framework-*.egg")[0]); from avocado.core.main import main; sys.exit(main())' run /bin/true
-         cd /tmp
-         python3 -c 'import sys; from pkg_resources import require; require("avocado-framework"); from avocado.core.main import main; sys.exit(main())' run /bin/true
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
 
+  egg_task_debian_12:
+
+    name: Egg task debian:12.4
+    runs-on: ubuntu-20.04
+    container:
+      image: debian:12.4
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_debian_11:
+
+    name: Egg task debian:11.0
+    runs-on: ubuntu-20.04
+    container:
+      image: debian:11.0
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_ubuntu_22:
+
+    name: Egg task ubuntu:22.04
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
+
+  egg_task_ubuntu_20:
+
+    name: Egg task ubuntu:20.04
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:20.04
+    steps:
+      - name: Install Python dependencies
+        run: apt update && apt -y install python3 python3-setuptools
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/egg
 
   podman_egg_task:
 
@@ -343,14 +464,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Test running avocado from eggs under Podman spawner
         run: |
          apt update && apt -y install python3 python3-setuptools
          python3 setup.py bdist_egg
          mv dist/avocado_framework-*egg /tmp/avocado_framework.egg
          python3 setup.py clean --all
-         python3 -c 'import sys; sys.path.insert(0, "/tmp/avocado_framework.egg"); from avocado.core.main import main; sys.exit(main())' run --spawner=podman --spawner-podman-image=fedora:36 --spawner-podman-avocado-egg=file:///tmp/avocado_framework.egg -- /bin/true
+         python3 -c 'import sys; sys.path.insert(0, "/tmp/avocado_framework.egg"); from avocado.core.main import main; sys.exit(main())' run --spawner=podman --spawner-podman-image=fedora:38 --spawner-podman-avocado-egg=file:///tmp/avocado_framework.egg -- /bin/true
 
   podman_external_runner_task:
 
@@ -358,7 +479,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Test running avocado from released eggs under Podman spawner with 3rd party plugins
         run: |
          apt update && apt -y install python3 python3-setuptools
@@ -366,21 +487,21 @@ jobs:
          cd examples/plugins/tests/magic
          python3 setup.py develop --user
          cd ../../../../
-         python3 -m avocado -V list -- pass fail | grep "magic: 2"
+         python3 -m avocado -V list -- magic:pass magic:fail | grep "magic: 2"
          podman pull quay.io/avocado-framework/avocado-ci-magic
-         python3 -m avocado run --spawner=podman --spawner-podman-image=quay.io/avocado-framework/avocado-ci-magic -- pass
-         tail -n1 ~/avocado/job-results/latest/results.tap | grep "ok 1 pass"
-         python3 -m avocado run --spawner=podman --spawner-podman-image=quay.io/avocado-framework/avocado-ci-magic -- fail || true
-         tail -n1 ~/avocado/job-results/latest/results.tap | grep "not ok 1 fail"
+         python3 -m avocado run --spawner=podman --spawner-podman-image=quay.io/avocado-framework/avocado-ci-magic -- magic:pass
+         tail -n1 ~/avocado/job-results/latest/results.tap | grep "ok 1 magic:pass"
+         python3 -m avocado run --spawner=podman --spawner-podman-image=quay.io/avocado-framework/avocado-ci-magic -- magic:fail || true
+         tail -n1 ~/avocado/job-results/latest/results.tap | grep "not ok 1 magic:fail"
 
   fedora_develop_install_uninstall_task:
     name: Fedora develop install/uninstall task
     runs-on: ubuntu-latest
     container:
-      image: fedora:36
+      image: fedora:38
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Test avocado install/uninstall
         run: |
          python3 -c 'import setuptools' || dnf -y install python3 python3-setuptools
@@ -402,7 +523,7 @@ jobs:
       image: quay.io/avocado-framework/avocado-ci-fedora-36
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run unittests and functional tests
         run: |
          make develop
