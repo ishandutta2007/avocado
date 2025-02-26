@@ -30,7 +30,6 @@ import threading
 
 
 class BaseDrainer(abc.ABC):
-
     """
     Base drainer, doesn't provide complete functionality to be useful.
     """
@@ -131,9 +130,8 @@ class FDDrainer(BaseDrainer):
     def data_available(self):  # pylint: disable=W0221
         try:
             return select.select([self._source], [], [], 1)[0]
-        except OSError as exc:
-            if exc.errno == 9:
-                return False
+        except OSError:
+            return False
 
     def read(self):
         data = b""

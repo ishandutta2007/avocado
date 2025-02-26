@@ -15,6 +15,7 @@ Please note that this is not a fully comprehensive list.
 .. toctree::
    :maxdepth: 3
 
+   standard/distro
    standard/teststmpdir
 
 ================
@@ -34,6 +35,4 @@ Some of these plugins may have extra dependencies of their own.
    optional/results/index
    optional/robot
    optional/varianters/index
-   optional/varianter_pict
-   optional/multiplexer
-   optional/varianter_yaml_to_mux
+   optional/spawner_remote

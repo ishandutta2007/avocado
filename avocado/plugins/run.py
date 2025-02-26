@@ -43,7 +43,6 @@ class RunInit(Init):
 
 
 class Run(CLICmd):
-
     """
     Implements the avocado 'run' subcommand
     """
@@ -171,6 +170,19 @@ class Run(CLICmd):
             long_arg="--job-category",
         )
 
+        help_msg = (
+            "Path to the json file with list of dependencies needed for each test."
+        )
+        settings.register_option(
+            section="job.run",
+            key="dependency",
+            help_msg=help_msg,
+            parser=parser,
+            default=None,
+            metavar="FILE",
+            long_arg="--job-dependency",
+        )
+
         settings.add_argparser_to_option(
             namespace="job.run.timeout",
             metavar="SECONDS",
@@ -253,6 +265,21 @@ class Run(CLICmd):
             help_msg=help_msg,
             parser=parser,
             long_arg="--log-test-data-directories",
+        )
+
+        settings.add_argparser_to_option(
+            namespace="resolver.run_executables",
+            parser=parser,
+            long_arg="--resolver-run-executables",
+            allow_multiple=True,
+        )
+
+        settings.add_argparser_to_option(
+            namespace="resolver.exec_runnables_recipe.arguments",
+            metavar="ARGS",
+            parser=parser,
+            long_arg="--resolver-exec-arguments",
+            allow_multiple=True,
         )
 
         parser_common_args.add_tag_filter_args(parser)

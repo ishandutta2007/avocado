@@ -41,76 +41,43 @@ def register_core_options():
         section="core",
         key="show",
         key_type=lambda x: set(x.split(",")),
-        metavar="STREAM[:LVL]",
+        metavar="STREAM[:LEVEL]",
         nargs="?",
         default=set(["app"]),
         help_msg=help_msg,
     )
 
     help_msg = (
-        "Python regular expression that will make the test status WARN when matched."
+        "The amount of time to wait between asking nicely for a task "
+        "to be terminated (say sending a signal) and proceeding with "
+        "a more forceful termination. This may allow runners within "
+        "tasks to perform clean ups. Spawners are free to implement "
+        "a behavior that is suitable to their isolation model, "
+        "including ignoring this configuration."
     )
     stgs.register_option(
-        section="simpletests.status",
-        key="warn_regex",
-        default="^WARN$",
-        help_msg=help_msg,
-    )
-
-    help_msg = (
-        "Location to search the regular expression on. "
-        "Accepted values: all, stdout, stderr."
-    )
-    stgs.register_option(
-        section="simpletests.status",
-        key="warn_location",
-        default="all",
-        help_msg=help_msg,
-    )
-
-    help_msg = (
-        "Python regular expression that will make the test status SKIP when matched."
-    )
-    stgs.register_option(
-        section="simpletests.status",
-        key="skip_regex",
-        default="^SKIP$",
-        help_msg=help_msg,
-    )
-
-    help_msg = (
-        "Location to search the regular expression on. "
-        "Accepted values: all, stdout, stderr."
-    )
-    stgs.register_option(
-        section="simpletests.status",
-        key="skip_location",
-        default="all",
-        help_msg=help_msg,
-    )
-
-    help_msg = (
-        "Fields to include in the presentation of executable test "
-        "failures.  Accepted values: status, stdout, stderr."
-    )
-    stgs.register_option(
-        section="simpletests.status",
-        key="failure_fields",
-        key_type=list,
-        default=["status", "stdout", "stderr"],
-        help_msg=help_msg,
-    )
-
-    help_msg = (
-        "The amount of time to give to the test process after "
-        "it it has been interrupted (such as with CTRL+C)"
-    )
-    stgs.register_option(
-        section="runner.timeout",
-        key="after_interrupted",
+        section="runner.task.interval",
+        key="from_soft_to_hard_termination",
         key_type=int,
         help_msg=help_msg,
-        default=60,
+        default=1,
+    )
+
+    help_msg = (
+        "The amount of time to wait between executing a more forceful "
+        "termination of a task, and the verification of the actual "
+        "termination. This may allow spawners to give the necessary "
+        "time for their isolation models to fully terminate a task. "
+        "Spawners are free to implement a behavior that is suitable "
+        "to their isolation model, including ignoring this "
+        "configuration."
+    )
+    stgs.register_option(
+        section="runner.task.interval",
+        key="from_hard_termination_to_verification",
+        key_type=int,
+        help_msg=help_msg,
+        default=0,
     )
 
     # Let's assume that by default, cache will be located under the user's
@@ -166,30 +133,6 @@ def register_core_options():
         help_msg=help_msg,
     )
 
-    help_msg = (
-        "The amount of time to wait after a test has reported "
-        "status but the test process has not finished"
-    )
-    stgs.register_option(
-        section="runner.timeout",
-        key="process_alive",
-        key_type=int,
-        help_msg=help_msg,
-        default=60,
-    )
-
-    help_msg = (
-        "The amount of to wait for a test status after the "
-        "process has been noticed to be dead"
-    )
-    stgs.register_option(
-        section="runner.timeout",
-        key="process_died",
-        key_type=int,
-        help_msg=help_msg,
-        default=10,
-    )
-
     help_msg = "Whether to display colored output in terminals that support it"
     stgs.register_option(
         section="runner.output",
@@ -232,6 +175,20 @@ def register_core_options():
         key="skip",
         default=[],
         key_type=list,
+        help_msg=help_msg,
+    )
+
+    help_msg = (
+        "If and how to clear test environment. Two possible options, "
+        "`system` and `all`. "
+        "`system` = no variables set, besides avocados default and kwargs. "
+        "`all` = only kwargs are set."
+    )
+    stgs.register_option(
+        section="runner.exectest",
+        key="clear_env",
+        key_type=str,
+        default=None,
         help_msg=help_msg,
     )
 

@@ -13,7 +13,6 @@ log = logging.getLogger("avocado.utils.software_manager")
 
 
 class DpkgBackend(BaseBackend):
-
     """
     This class implements operations executed with the dpkg package manager.
 
@@ -90,8 +89,8 @@ class DpkgBackend(BaseBackend):
         archive = ar.Ar(abs_path)
         data_tarball_name = archive.list()[2]
         member_data = archive.read_member(data_tarball_name)
-        tarball = tarfile.open(fileobj=io.BytesIO(member_data))
-        tarball.extractall(dest)
+        with tarfile.open(fileobj=io.BytesIO(member_data)) as tarball:
+            tarball.extractall(dest)
         return dest
 
     def list_files(self, package):

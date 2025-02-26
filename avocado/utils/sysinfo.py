@@ -32,7 +32,6 @@ class CollectibleException(Exception):
 
 
 class Collectible(ABC):
-
     """
     Abstract class for representing sysinfo collectibles.
     """
@@ -65,7 +64,7 @@ class Collectible(ABC):
     def __eq__(self, other):
         if hash(self) == hash(other):
             return True
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -80,7 +79,6 @@ class Collectible(ABC):
 
 
 class Logfile(Collectible):
-
     """
     Collectible system file.
 
@@ -102,7 +100,7 @@ class Logfile(Collectible):
     def __eq__(self, other):
         if isinstance(other, Logfile):
             return (self.path, self.log_path) == (other.path, other.log_path)
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -117,16 +115,15 @@ class Logfile(Collectible):
         if os.path.exists(self.path):
             try:
                 yield from self._read_file(self.path)
-            except IOError:
+            except IOError as exc:
                 raise CollectibleException(
                     f"Not logging {self.path} " f"(lack of permissions)"
-                )
+                ) from exc
         else:
             raise CollectibleException(f"Not logging {self.path} " f"(file not found)")
 
 
 class Command(Collectible):
-
     """
     Collectible command.
 
@@ -150,7 +147,7 @@ class Command(Collectible):
     def __eq__(self, other):
         if isinstance(other, Command):
             return (self.cmd, self.log_path) == (other.cmd, other.log_path)
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -186,13 +183,14 @@ class Command(Collectible):
                 f"Not logging '{self.cmd}' "
                 f"(command '{exc_fnf.filename}' "
                 f"was not found)"
-            )
+            ) from exc_fnf
         except Exception as exc:  # pylint: disable=W0703, W0612
-            raise CollectibleException(f'Could not execute "{self.cmd}": ' "{exc}")
+            raise CollectibleException(
+                f'Could not execute "{self.cmd}": ' "{exc}"
+            ) from exc
 
 
 class Daemon(Command):
-
     """
     Collectible daemon.
 
@@ -204,7 +202,7 @@ class Daemon(Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.daemon_process = None
-        self.temp_file = tempfile.NamedTemporaryFile()
+        self.temp_file = tempfile.NamedTemporaryFile()  # pylint: disable=R1732
 
     def __repr__(self):
         r = "Daemon(%r, %r)"
@@ -214,7 +212,7 @@ class Daemon(Command):
     def __eq__(self, other):
         if isinstance(other, Daemon):
             return (self.cmd, self.log_path) == (other.cmd, other.log_path)
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -235,10 +233,11 @@ class Daemon(Command):
         if self.locale:
             env["LC_ALL"] = self.locale
         logf_path = self.temp_file.name
-        stdin = open(os.devnull, "r")  # pylint: disable=W1514
-        stdout = open(logf_path, "w")  # pylint: disable=W1514
+        stdin = open(os.devnull, "r")  # pylint: disable=W1514, R1732
+        stdout = open(logf_path, "w")  # pylint: disable=W1514, R1732
 
         try:
+            # pylint: disable=R1732
             self.daemon_process = subprocess.Popen(
                 shlex.split(self.cmd),
                 stdin=stdin,
@@ -248,7 +247,9 @@ class Daemon(Command):
                 env=env,
             )
         except OSError as os_err:
-            raise CollectibleException(f'Could not execute "{self.cmd}": ' f"{os_err}")
+            raise CollectibleException(
+                f'Could not execute "{self.cmd}": ' f"{os_err}"
+            ) from os_err
 
     def collect(self):
         """
@@ -271,7 +272,6 @@ class Daemon(Command):
 
 
 class JournalctlWatcher(Collectible):
-
     """
     Track the content of systemd journal.
 
@@ -293,7 +293,7 @@ class JournalctlWatcher(Collectible):
     def __eq__(self, other):
         if isinstance(other, JournalctlWatcher):
             return self.log_path == other.log_path
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -308,7 +308,9 @@ class JournalctlWatcher(Collectible):
             last_record = json.loads(astring.to_text(result, "utf-8"))
             return last_record["__CURSOR"]
         except Exception as detail:  # pylint: disable=W0703
-            raise CollectibleException(f"Journalctl collection failed: " f"{detail}")
+            raise CollectibleException(
+                f"Journalctl collection failed: " f"{detail}"
+            ) from detail
 
     def collect(self):
         """
@@ -323,11 +325,10 @@ class JournalctlWatcher(Collectible):
             except Exception as detail:  # pylint: disable=W0703
                 raise CollectibleException(
                     f"Journalctl collection failed: " f"{detail}"
-                )
+                ) from detail
 
 
 class LogWatcher(Collectible):
-
     """
     Keep track of the contents of a log file in another compressed file.
 
@@ -353,10 +354,10 @@ class LogWatcher(Collectible):
             stat = os.stat(path)
             self.size = stat.st_size
             self.inode = stat.st_ino
-        except (IOError, OSError):
+        except (IOError, OSError) as exc:
             raise CollectibleException(
                 f"Not logging {self.path} " f"(lack of permissions)"
-            )
+            ) from exc
 
     def __repr__(self):
         r = "LogWatcher(%r, %r)"
@@ -366,7 +367,7 @@ class LogWatcher(Collectible):
     def __eq__(self, other):
         if isinstance(other, LogWatcher):
             return (self.path, self.log_path) == (other.path, other.log_path)
-        elif isinstance(other, Collectible):
+        if isinstance(other, Collectible):
             return False
         return NotImplemented
 
@@ -389,7 +390,7 @@ class LogWatcher(Collectible):
         self.size = current_size
         try:
             yield from self._read_file(self.path, bytes_to_skip)
-        except (IOError, OSError):
+        except (IOError, OSError) as exc:
             raise CollectibleException(
                 f"Not logging {self.path} " f"(lack of permissions)"
-            )
+            ) from exc

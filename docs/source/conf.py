@@ -19,9 +19,6 @@ ROOT_PATH = os.path.abspath(os.path.join("..", ".."))
 sys.path.insert(0, ROOT_PATH)
 
 
-# Flag that tells if the docs are being built on readthedocs.org
-ON_RTD = os.environ.get("READTHEDOCS", None) == "True"
-
 #
 # Auto generate API documentation
 #
@@ -40,8 +37,9 @@ def generate_reference():
     reference_path = os.path.join(
         ROOT_PATH, "docs", "source", "config", "reference.rst"
     )
+    stdout_text = result.stdout_text.replace("['/run/*']", r"['/run/\*']")
     with open(reference_path, "w", encoding="utf-8") as reference:
-        reference.write(result.stdout_text)
+        reference.write(stdout_text)
 
 
 def generate_vmimage_distro():
@@ -131,7 +129,7 @@ API_SECTIONS = {
 # clean up all previous rst files. RTD is known to keep them from previous runs
 process.run(f"find {BASE_API_OUTPUT_DIR} -name '*.rst' -delete")
 
-for (section, params) in API_SECTIONS.items():
+for section, params in API_SECTIONS.items():
     output_dir = os.path.join(BASE_API_OUTPUT_DIR, params[2])
     exclude_dirs = [os.path.join(API_SOURCE_DIR, d) for d in params[3]]
     exclude_dirs = " ".join(exclude_dirs)
@@ -202,7 +200,7 @@ The following pages document the private APIs of optional Avocado plugins.
             continue
         output_dir = os.path.join(API_OPTIONAL_PLUGINS_PATH, name)
         params = {"API_SOURCE_DIR": path, "output_dir": output_dir, "exclude_dirs": ""}
-        process.run(APIDOC_TEMPLATE % params)
+        process.run(f"{APIDOC_TEMPLATE % params} --implicit-namespaces")
         # Remove the unnecessary generated files
         os.unlink(os.path.join(output_dir, "modules.rst"))
         optional_plugins_toc.write(f"\n   {os.path.join(name, name)}")
@@ -212,27 +210,19 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
     "sphinx.ext.coverage",
+    "sphinx_rtd_theme",
 ]
 
 master_doc = "index"  # pylint: disable=C0103
 project = "Avocado"  # pylint: disable=C0103
-copyright = "2014-2019, Red Hat"  # pylint: disable=W0622,C0103
+copyright = "2014-2023, Red Hat"  # pylint: disable=W0622,C0103
 
 VERSION_FILE = os.path.join(ROOT_PATH, "VERSION")
 VERSION = genio.read_file(VERSION_FILE).strip()
 version = VERSION  # pylint: disable=C0103
 release = VERSION  # pylint: disable=C0103
 
-if not ON_RTD:  # only import and set the theme if we're building docs locally
-    try:
-        import sphinx_rtd_theme
-
-        html_theme = "sphinx_rtd_theme"  # pylint: disable=C0103
-        html_theme_path = [
-            sphinx_rtd_theme.get_html_theme_path()
-        ]  # pylint: disable=C0103
-    except ImportError:
-        html_theme = "default"  # pylint: disable=C0103
+html_theme = "sphinx_rtd_theme"  # pylint: disable=C0103
 
 htmlhelp_basename = "avocadodoc"  # pylint: disable=C0103
 
@@ -262,6 +252,6 @@ texinfo_documents = [  # pylint: disable=C0103
     ),
 ]
 
-intersphinx_mapping = {"http://docs.python.org/": None}  # pylint: disable=C0103
+intersphinx_mapping = {"python": ("https://docs.python.org", None)}
 
 autoclass_content = "both"  # pylint: disable=C0103

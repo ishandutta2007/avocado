@@ -37,7 +37,6 @@ SUPPORTED_PACKAGE_MANAGERS = {
 
 
 class SystemInspector:
-
     """
     System inspector class.
 
@@ -66,7 +65,7 @@ class SystemInspector:
                 pass
 
         pm_supported = None
-        if len(list_supported) == 0:
+        if not list_supported:
             pm_supported = None
         if len(list_supported) == 1:
             pm_supported = list_supported[0]

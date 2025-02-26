@@ -22,6 +22,8 @@ import asyncio
 import functools
 import inspect
 import logging
+import multiprocessing
+import multiprocessing.pool
 import os
 import shutil
 import sys
@@ -69,7 +71,6 @@ TEST_STATE_ATTRIBUTES = (
 
 
 class TestData:
-
     """
     Class that adds the ability for tests to have access to data files
 
@@ -220,7 +221,6 @@ class TestData:
 
 
 class Test(unittest.TestCase, TestData):
-
     """
     Base implementation for the test class.
 
@@ -252,7 +252,6 @@ class Test(unittest.TestCase, TestData):
         params=None,
         base_logdir=None,
         config=None,
-        runner_queue=None,
         tags=None,
     ):
         """
@@ -318,8 +317,12 @@ class Test(unittest.TestCase, TestData):
         elif isinstance(params, tuple):
             params, paths = params[0], params[1]
         self.__params = parameters.AvocadoParams(params, paths, self.__log.name)
-        default_timeout = getattr(self, "timeout", None)
-        self.timeout = self.params.get("timeout", default=default_timeout)
+        self.timeout = original_timeout = self.params.get(
+            "timeout", default=self.timeout
+        )
+        timeout_factor = float(self.params.get("timeout_factor", default=1.0))
+        if original_timeout is not None:
+            self.timeout = float(original_timeout) * timeout_factor
 
         self.__status = None
         self.__fail_reason = None
@@ -336,8 +339,6 @@ class Test(unittest.TestCase, TestData):
         self.paused = False
         self.paused_msg = ""
 
-        self.__runner_queue = runner_queue
-
         self.log.debug("Test metadata:")
         if self.filename:
             self.log.debug("  filename: %s", self.filename)
@@ -347,6 +348,9 @@ class Test(unittest.TestCase, TestData):
             pass
         else:
             self.log.debug("  teststmpdir: %s", teststmpdir)
+        self.log.debug("  original timeout: %s", original_timeout)
+        self.log.debug("  timeout factor: %s", timeout_factor)
+        self.log.debug("  actual timeout: %s", self.timeout)
 
         unittest.TestCase.__init__(self, methodName=methodName)
         TestData.__init__(self)
@@ -478,25 +482,6 @@ class Test(unittest.TestCase, TestData):
         return self.__cache_dirs
 
     @property
-    def runner_queue(self):
-        """
-        The communication channel between test and test runner
-        """
-        return self.__runner_queue
-
-    def set_runner_queue(self, runner_queue):
-        """
-        Override the runner_queue
-        """
-        if self.__runner_queue is not None:
-            raise RuntimeError(
-                f"Overriding of runner_queue multiple times "
-                f"is not allowed -> old={self.__runner_queue} "
-                f"new={runner_queue}"
-            )
-        self.__runner_queue = runner_queue
-
-    @property
     def status(self):
         """
         The result status of this test
@@ -555,13 +540,6 @@ class Test(unittest.TestCase, TestData):
             current_time = time.monotonic()
         self.time_elapsed = current_time - self.time_start
 
-    def report_state(self):
-        """
-        Send the current test state to the test runner process
-        """
-        if self.runner_queue is not None:
-            self.runner_queue.put(self.get_state())
-
     def get_state(self):
         """
         Serialize selected attributes representing the test state
@@ -609,7 +587,7 @@ class Test(unittest.TestCase, TestData):
             self.__skip_test = True
             stacktrace.log_exc_info(sys.exc_info(), logger=self.log)
             raise exceptions.TestSkipError(details)
-        except exceptions.TestCancel:
+        except (exceptions.TestCancel, exceptions.TestInterrupt):
             stacktrace.log_exc_info(sys.exc_info(), logger=self.log)
             raise
         except:  # Old-style exceptions are not inherited from Exception()
@@ -657,13 +635,14 @@ class Test(unittest.TestCase, TestData):
                 f"test. Original skip exception: {details}"
             )
             raise exceptions.TestError(skip_illegal_msg)
-        except exceptions.TestCancel:
+        except (exceptions.TestCancel, exceptions.TestInterrupt):
             stacktrace.log_exc_info(sys.exc_info(), logger=self.log)
             raise
         except:  # avoid old-style exception failures pylint: disable=W0702
             stacktrace.log_exc_info(sys.exc_info(), logger=self.log)
-            details = sys.exc_info()[1]
-            raise exceptions.TestSetupFail(details)
+            if self.status != "INTERRUPTED":
+                details = sys.exc_info()[1]
+                raise exceptions.TestSetupFail(details)
 
     def _setup_environment_variables(self):
         os.environ["AVOCADO_VERSION"] = VERSION
@@ -677,14 +656,26 @@ class Test(unittest.TestCase, TestData):
 
     def _catch_test_status(self, method):
         """Wrapper around test methods for catching and logging failures."""
-        try:
+
+        def set_new_event_loop_for_method(method):
+            asyncio.set_event_loop(asyncio.new_event_loop())
             method()
-            if self.__log_warn_used and self.__status not in STATUSES_NOT_OK:
-                raise exceptions.TestWarn(
-                    "Test passed but there were warnings "
-                    "during execution. Check the log for "
-                    "details."
-                )
+
+        try:
+            pool = multiprocessing.pool.ThreadPool(1)
+            res = pool.apply_async(set_new_event_loop_for_method, [method])
+            pool.close()
+            try:
+                res.get(self.timeout)
+                if self.__log_warn_used and self.__status not in STATUSES_NOT_OK:
+                    raise exceptions.TestWarn(
+                        "Test passed but there were warnings "
+                        "during execution. Check the log for "
+                        "details."
+                    )
+            except multiprocessing.TimeoutError:
+                raise exceptions.TestInterrupt("Test interrupted: Timeout reached")
+
         except exceptions.TestBaseException as detail:
             self.__status = detail.status
             self.__fail_class = detail.__class__.__name__
@@ -709,6 +700,8 @@ class Test(unittest.TestCase, TestData):
                 )
             for e_line in tb_info:
                 self.log.error(e_line)
+        finally:
+            pool.terminate()
 
     def run_avocado(self):
         """

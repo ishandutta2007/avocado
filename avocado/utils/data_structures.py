@@ -53,15 +53,15 @@ def geometric_mean(values):
     """
     try:
         values = [int(value) for value in values]
-    except ValueError:
-        raise ValueError(f"Invalid inputs {values}. Provide valid inputs")
+    except ValueError as exc:
+        raise ValueError(f"Invalid inputs {values}. Provide valid inputs") from exc
     no_values = len(values)
-    if no_values == 0:
+    if not no_values:
         return None
     return math.exp(sum(math.log(number) for number in values) / no_values)
 
 
-def compare_matrices(matrix1, matrix2, threshold=0.05):
+def compare_matrices(matrix1, matrix2, threshold=0.05):  # pylint: disable=R0912
     """
     Compare 2 matrices nxm and return a matrix nxm with comparison data and
     stats. When the first columns match, they are considered as header and
@@ -98,7 +98,7 @@ def compare_matrices(matrix1, matrix2, threshold=0.05):
             try:
                 ratio = float(element2) / float(element1)
             except ZeroDivisionError:  # For 0s, allow exact match or error
-                if float(element2) == 0:
+                if not float(element2):
                     new_line.append(".")
                     same += 1
                 else:
@@ -136,13 +136,12 @@ def comma_separated_ranges_to_list(string):
     :return list: list of integer values in comma separated range
     """
     values = []
-    for value in string.split(","):
-        if "-" in value:
-            start, end = value.split("-")
-            for val in range(int(start), int(end) + 1):
-                values.append(int(val))
+    for range_str in string.split(","):
+        if "-" in range_str:
+            start, end = range_str.split("-")
+            values.extend(range(int(start), int(end) + 1))
         else:
-            values.append(int(value))
+            values.append(int(range_str))
     return values
 
 
@@ -153,6 +152,8 @@ def recursive_compare_dict(dict1, dict2, level="DictKey", diff_btw_dict=None):
 
     :rtype: list or None
     """
+    if diff_btw_dict is None:
+        diff_btw_dict = []
     if isinstance(dict1, dict) and isinstance(dict2, dict):
         if dict1.keys() != dict2.keys():
             set1 = set(dict1.keys())
@@ -166,7 +167,7 @@ def recursive_compare_dict(dict1, dict2, level="DictKey", diff_btw_dict=None):
                 dict1[k], dict2[k], level=f"{level}.{k}", diff_btw_dict=diff_btw_dict
             )
         return diff_btw_dict
-    elif isinstance(dict1, list) and isinstance(dict2, list):
+    if isinstance(dict1, list) and isinstance(dict2, list):
         if len(dict1) != len(dict2):
             diff_btw_dict.append(f"{level} + {len(dict1)} - {len(dict2)}")
         common_len = min(len(dict1), len(dict2))
@@ -180,10 +181,10 @@ def recursive_compare_dict(dict1, dict2, level="DictKey", diff_btw_dict=None):
     else:
         if dict1 != dict2:
             diff_btw_dict.append(f"{level} - dict1 value:{dict1}, dict2 value:{dict2}")
+    return None
 
 
 class Borg:
-
     """
     Multiple instances of this class will share the same state.
 
@@ -201,7 +202,6 @@ class Borg:
 
 
 class LazyProperty:
-
     """
     Lazily instantiated property.
 
@@ -225,7 +225,6 @@ class LazyProperty:
 
 
 class CallbackRegister:
-
     """
     Registers pickable functions to be executed later.
     """
@@ -297,12 +296,12 @@ def time_to_seconds(time):
                 seconds = int(time[:-1]) * mult
             else:
                 seconds = int(time)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
             raise ValueError(
                 f"Invalid value '{time}' for time. Use a string "
                 f"with the number and optionally the time unit "
                 f"(s, m, h or d)."
-            )
+            ) from exc
     else:
         seconds = 0
     return seconds
@@ -343,10 +342,10 @@ class DataSize:
             if self._value < 0:
                 raise ValueError
 
-        except ValueError:
+        except ValueError as exc:
             raise InvalidDataSize(
                 'String not in size + unit format (i.e. "10M", "100k", ...)'
-            )
+            ) from exc
 
     @property
     def value(self):

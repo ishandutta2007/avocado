@@ -38,7 +38,6 @@ __all__ = [
 
 # pylint: disable=R0903
 class LinuxDistro:
-
     """
     Simple collection of information for a Linux Distribution
     """
@@ -97,7 +96,6 @@ UNKNOWN_DISTRO = LinuxDistro(
 
 
 class Probe:
-
     """
     Probes the machine and does it best to confirm it's the right distro.
     If given an avocado.utils.ssh.Session object representing another machine, Probe
@@ -135,10 +133,9 @@ class Probe:
         :returns: whether the file exists in remote machine or not
         :rtype: bool
         """
-        if self.session and self.session.cmd(f"test -f {file_name}").exit_status == 0:
+        if self.session and not self.session.cmd(f"test -f {file_name}").exit_status:
             return True
-        else:
-            return False
+        return False
 
     def check_name_for_file(self):
         """
@@ -163,8 +160,9 @@ class Probe:
         if self.check_name_for_file():
             if self.check_for_remote_file(self.CHECK_FILE):
                 return self.CHECK_FILE_DISTRO_NAME
-            elif os.path.exists(self.CHECK_FILE):
+            if os.path.exists(self.CHECK_FILE):
                 return self.CHECK_FILE_DISTRO_NAME
+        return None
 
     def check_name_for_file_contains(self):
         """
@@ -198,6 +196,7 @@ class Probe:
                 ).stdout_text.split("/n")
             elif os.path.exists(self.CHECK_FILE):
                 try:
+                    # pylint: disable=R1732
                     check_file = open(self.CHECK_FILE, encoding="utf-8")
                 except IOError as err:
                     LOGGER.debug("Could not open %s", self.CHECK_FILE)
@@ -210,6 +209,7 @@ class Probe:
             for line in check_file:
                 if self.CHECK_FILE_CONTAINS in line:
                     return self.CHECK_FILE_DISTRO_NAME
+        return None
 
     def check_version(self):
         """
@@ -229,7 +229,7 @@ class Probe:
         """
         if self.check_version():
             if self.session:
-                if self.session.cmd(f"test -f {self.CHECK_FILE}").exit_status != 0:
+                if self.session.cmd(f"test -f {self.CHECK_FILE}").exit_status:
                     return None
             elif not os.path.exists(self.CHECK_FILE):
                 return None
@@ -241,15 +241,15 @@ class Probe:
                 ).stdout_text
             else:
                 try:
-                    version_file_content = open(
-                        self.CHECK_FILE, encoding="utf-8"
-                    ).read()
+                    with open(self.CHECK_FILE, encoding="utf-8") as check_file:
+                        version_file_content = check_file.read()
                 except IOError as err:
                     LOGGER.debug("Could not open %s", self.CHECK_FILE)
                     LOGGER.debug("Exception: %s", str(err))
                     return None
 
             return self.CHECK_VERSION_REGEX.match(version_file_content)
+        return None
 
     def version(self):
         """
@@ -276,7 +276,8 @@ class Probe:
         match = self._get_version_match()
         if match is not None:
             if len(match.groups()) > 1:
-                release = match.groups()[1]
+                if match.groups()[1]:
+                    release = match.groups()[1]
         return release
 
     def get_distro(self):
@@ -323,7 +324,6 @@ class Probe:
 
 
 class RedHatProbe(Probe):
-
     """
     Probe with version checks for Red Hat Enterprise Linux systems
     """
@@ -337,19 +337,28 @@ class RedHatProbe(Probe):
 
 
 class CentosProbe(RedHatProbe):
-
     """
     Probe with version checks for CentOS systems
     """
 
     CHECK_FILE = "/etc/redhat-release"
-    CHECK_FILE_CONTAINS = "CentOS"
+    CHECK_FILE_CONTAINS = "CentOS Linux"
     CHECK_FILE_DISTRO_NAME = "centos"
-    CHECK_VERSION_REGEX = re.compile(r"CentOS.* release (\d{1,2})\.(\d{1,2}).*")
+    CHECK_VERSION_REGEX = re.compile(r"CentOS Linux release (\d{1,2})\.(\d{1,2}).*")
+
+
+class CentosStreamProbe(RedHatProbe):
+    """
+    Probe with version checks for CentOS Stream systems
+    """
+
+    CHECK_FILE = "/etc/redhat-release"
+    CHECK_FILE_CONTAINS = "CentOS Stream"
+    CHECK_FILE_DISTRO_NAME = "centos-stream"
+    CHECK_VERSION_REGEX = re.compile(r"CentOS Stream release (\d{1,2})")
 
 
 class FedoraProbe(RedHatProbe):
-
     """
     Probe with version checks for Fedora systems
     """
@@ -361,7 +370,6 @@ class FedoraProbe(RedHatProbe):
 
 
 class AmazonLinuxProbe(Probe):
-
     """
     Probe for Amazon Linux systems
     """
@@ -370,23 +378,21 @@ class AmazonLinuxProbe(Probe):
     CHECK_FILE_CONTAINS = "Amazon Linux"
     CHECK_FILE_DISTRO_NAME = "amzn"
     CHECK_VERSION_REGEX = re.compile(
-        r".*VERSION=\"(\d+)\.(\d+)\".*", re.MULTILINE | re.DOTALL
+        r".*VERSION=\"(\d+)\.?(\d+)?\".*", re.MULTILINE | re.DOTALL
     )
 
 
 class DebianProbe(Probe):
-
     """
     Simple probe with file checks for Debian systems
     """
 
     CHECK_FILE = "/etc/debian_version"
     CHECK_FILE_DISTRO_NAME = "debian"
-    CHECK_VERSION_REGEX = re.compile(r"(\d+)\.(\d+)")
+    CHECK_VERSION_REGEX = re.compile(r".+/(.+)|(\d+)\.\d+")
 
 
 class UbuntuProbe(Probe):
-
     """
     Simple probe for Ubuntu systems in general
     """
@@ -395,12 +401,11 @@ class UbuntuProbe(Probe):
     CHECK_FILE_CONTAINS = "ubuntu"
     CHECK_FILE_DISTRO_NAME = "Ubuntu"
     CHECK_VERSION_REGEX = re.compile(
-        r".*VERSION_ID=\"(\d+)\.(\d+)\".*", re.MULTILINE | re.DOTALL
+        r".*VERSION_ID=\"(\d+\.\d+)\".*", re.MULTILINE | re.DOTALL
     )
 
 
 class SUSEProbe(Probe):
-
     """
     Simple probe for SUSE systems in general
     """
@@ -443,7 +448,6 @@ class SUSEProbe(Probe):
 
 
 class OpenEulerProbe(Probe):
-
     """
     Simple probe for openEuler systems in general
     """
@@ -455,7 +459,6 @@ class OpenEulerProbe(Probe):
 
 
 class UnionTechProbe(Probe):
-
     """
     Simple probe for UnionTech systems in general
     """
@@ -480,6 +483,7 @@ def register_probe(probe_class):
 
 register_probe(RedHatProbe)
 register_probe(CentosProbe)
+register_probe(CentosStreamProbe)
 register_probe(FedoraProbe)
 register_probe(AmazonLinuxProbe)
 register_probe(DebianProbe)
@@ -519,7 +523,6 @@ def detect(session=None):
 
 
 class Spec:
-
     """
     Describes a distro, usually for setting minimum distro requirements
     """

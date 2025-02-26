@@ -25,10 +25,13 @@ Disk utilities
 
 
 import json
+import logging
 import os
 import re
 
-from avocado.utils import process
+from avocado.utils import genio, multipath, process
+
+LOGGER = logging.getLogger(__name__)
 
 
 class DiskError(Exception):
@@ -71,11 +74,11 @@ def create_loop_device(size, blocksize=4096, directory="./"):
         f"dd if=/dev/zero of={loop_file} bs={blocksize} "
         f"count={int(size / blocksize)}"
     )
-    if process.system(cmd, ignore_status=True, sudo=True) != 0:
+    if process.system(cmd, ignore_status=True, sudo=True):
         raise DiskError("Unable to create backing file for loop device")
 
     cmd = f"losetup {loop} {loop_file} -P"
-    if process.system(cmd, ignore_status=True, sudo=True) != 0:
+    if process.system(cmd, ignore_status=True, sudo=True):
         raise DiskError("Unable to create the loop device")
     return loop
 
@@ -99,7 +102,7 @@ def delete_loop_device(device):
     if not loop_file:
         raise DiskError("Unable to find backing file for loop device")
     cmd = f"losetup -d {device}"
-    if process.system(cmd, ignore_status=True, sudo=True) != 0:
+    if process.system(cmd, ignore_status=True, sudo=True):
         raise DiskError("Unable to delete the loop device")
     os.remove(loop_file)
     return True
@@ -118,9 +121,21 @@ def get_disks():
     :returns: a list of paths to the physical disks on the system
     :rtype: list of str
     """
-    json_result = process.run("lsblk --json --paths --inverse")
-    json_data = json.loads(json_result.stdout_text)
-    return [str(disk["name"]) for disk in json_data["blockdevices"]]
+    try:
+        json_result = process.run("lsblk --json --paths --inverse")
+    except process.CmdError as ce:
+        raise DiskError(f"Error occurred while executing lsblk command: {ce}") from ce
+    try:
+        json_data = json.loads(json_result.stdout_text)
+    except json.JSONDecodeError as je:
+        raise DiskError(f"Error occurred while parsing JSON data: {je}") from je
+    disks = []
+    for device in json_data["blockdevices"]:
+        disks.append(device["name"])
+        if "children" in device:
+            for child in device["children"]:
+                disks.append(child["name"])
+    return disks
 
 
 def get_all_disk_paths():
@@ -203,6 +218,7 @@ def get_filesystem_type(mount_point="/"):
             _, fs_file, fs_vfstype, _, _, _ = mount_line.split()
             if fs_file == mount_point:
                 return fs_vfstype
+    return None
 
 
 def is_root_device(device):
@@ -311,3 +327,169 @@ def get_disk_mountpoint(device):
             if dev == device:
                 return fs_dir
         return None
+
+
+def create_linux_raw_partition(disk_name, size=None, num_of_par=1):
+    """
+    Creates partitions using sfdisk command
+
+    :param disk_name: disk/device name
+    :type disk_name: str
+    :param size: size of partition
+    :type size: str
+    :param num_of_par: Number of partitions to be created
+    :type num_of_par: int
+
+    Returns list of created partitions
+    """
+    if not size:
+        size = get_size_of_disk(disk_name) / 1073741824
+        size = size / num_of_par
+        size = str(size) + "G"
+    partitions = [
+        "size= +" + size if val != 3 else "type=5" for val in range(0, num_of_par + 1)
+    ]
+    disk_partition_file = (
+        "/tmp/creat_partition" + process.run("date '+%d-%m-%y_%T'").stdout_text.strip()
+    )
+    if not os.path.isfile(disk_partition_file):
+        process.run("touch " + disk_partition_file)
+    for line in partitions:
+        genio.append_one_line(disk_partition_file, line)
+    try:
+        part_output = process.getoutput(
+            "sfdisk " + disk_name + " < " + disk_partition_file
+        )
+    except Exception as exc:
+        msg = f"sfdisk partition creation command failed on disk {disk_name}"
+        LOGGER.warning(msg)
+        raise DiskError(msg) from exc
+    rescan_disk(disk_name)
+    if "The partition table has been altered" in part_output:
+        return get_disk_partitions(disk_name)
+    return None
+
+
+def get_size_of_disk(disk):
+    """
+    Returns size of disk in bytes
+
+    :param disk: disk/device name
+    :type disk: str
+
+    Return Type: int
+    """
+    return int(process.getoutput("lsblk -b --output SIZE -n -d " + disk))
+
+
+def delete_partition(partition_name):
+    """
+    Deletes mentioned partition from disk
+
+    :param partition_name: partition absolute path
+    :type partition_name: str
+    """
+    disk_index = re.search(r"\d+", partition_name).start()
+    try:
+        process.run(
+            "sfdisk --delete "
+            + partition_name[:disk_index]
+            + " "
+            + partition_name[disk_index:]
+        )
+    except Exception as exc:
+        msg = f"sfdisk --delete command failed on disk {partition_name}"
+        LOGGER.warning(msg)
+        raise DiskError(msg) from exc
+
+
+def clean_disk(disk_name):
+    """
+    Cleans partitions table of a disk
+
+    :param disk_name: disk name
+    :type disk_name: str
+    """
+    output = process.getoutput("sfdisk --delete " + disk_name)
+    rescan_disk(disk_name)
+    if not get_disk_partitions(disk_name):
+        if "The partition table has been altered" in output:
+            process.run("wipefs -af " + disk_name)
+
+
+def rescan_disk(disk_name):
+    """
+    Re-scans disk
+
+    :param disk_name: disk name
+    :type disk_name: str
+    """
+    disk_name = os.path.realpath(disk_name)
+    if re.search(r"dm-\d+", disk_name):
+        mpath_dict = multipath.get_multipath_details()
+        for _ in range(len(mpath_dict["maps"])):
+            if mpath_dict["maps"][_]["sysfs"] == disk_name.split("/")[-1]:
+                disk_name = (
+                    "/dev/" + mpath_dict["maps"][_]["path_groups"][0]["paths"][0]["dev"]
+                )
+                break
+    process.run(f"echo 1 > /sys/block/{disk_name}/device/rescan")
+
+
+def get_disk_partitions(disk):
+    """
+    Returns partitions of a disk excluding extended partition
+
+    :param disk: disk name
+    :type disk: str
+
+    Returns array with all partitions of disk
+    """
+    rescan_disk(disk)
+    partitions_op = process.getoutput("sfdisk -l " + disk)
+    return [
+        line.split(" ")[0]
+        for line in partitions_op.split("\n")
+        if line.startswith(disk) and "Extended" not in line
+    ]
+
+
+def get_io_scheduler_list(device_name):
+    """
+    Returns io scheduler available for the IO Device
+    :param device_name: Device  name example like sda
+    :return: list of IO scheduler
+    """
+    with open(__sched_path(device_name), "r", encoding="utf-8") as fl:
+        return fl.read().translate(str.maketrans("[]", " ")).split()
+
+
+def get_io_scheduler(device_name):
+    """
+    Return io scheduler name which is set currently  for device
+    :param device_name: Device  name example like sda
+    :return: IO scheduler
+    :rtype :  str
+    """
+    return re.split(
+        r"[\[\]]", open(__sched_path(device_name), "r", encoding="utf-8").read()
+    )[1]
+
+
+def __sched_path(device_name):
+
+    file_path = f"/sys/block/{device_name}/queue/scheduler"
+    return file_path
+
+
+def set_io_scheduler(device_name, name):
+    """
+    Set io scheduler to a device
+    :param device_name:  Device  name example like sda
+    :param name: io scheduler name
+    """
+    if name not in get_io_scheduler_list(device_name):
+        raise DiskError(f"No such IO scheduler: {name}")
+
+    with open(__sched_path(device_name), "w", encoding="utf-8") as fp:
+        fp.write(name)

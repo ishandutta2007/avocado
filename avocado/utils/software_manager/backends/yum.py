@@ -22,7 +22,6 @@ log = logging.getLogger("avocado.utils.software_manager")
 
 
 class YumBackend(RpmBackend):
-
     """
     Implements the yum backend for software manager.
 
@@ -91,12 +90,7 @@ class YumBackend(RpmBackend):
         Installs package [name]. Handles local installs.
         """
         i_cmd = self.base_command + "install" + " " + name
-
-        try:
-            process.system(i_cmd, sudo=True)
-            return True
-        except process.CmdError:
-            return False
+        return self._run_cmd(i_cmd)
 
     def remove(self, name):
         """
@@ -105,11 +99,7 @@ class YumBackend(RpmBackend):
         :param name: Package name (eg. 'ipython').
         """
         r_cmd = self.base_command + "erase" + " " + name
-        try:
-            process.system(r_cmd, sudo=True)
-            return True
-        except process.CmdError:
-            return False
+        return self._run_cmd(r_cmd)
 
     def add_repo(self, url, **opt_params):
         """
@@ -188,11 +178,7 @@ class YumBackend(RpmBackend):
         else:
             r_cmd = self.base_command + "update" + " " + name
 
-        try:
-            process.system(r_cmd, sudo=True)
-            return True
-        except process.CmdError:
-            return False
+        return self._run_cmd(r_cmd)
 
     def provides(self, name):
         """
@@ -215,11 +201,10 @@ class YumBackend(RpmBackend):
             log.error("Error searching for package that provides %s: %s", name, exc)
             d_provides = []
 
-        provides_list = [key for key in d_provides]
+        provides_list = list(d_provides)
         if provides_list:
             return str(provides_list[0])
-        else:
-            return None
+        return None
 
     @staticmethod
     def build_dep(name):
@@ -245,7 +230,7 @@ class YumBackend(RpmBackend):
 
         :param name: name of the package
         :param dest_path: destination_path
-        :param  build_option : rpmbuild option
+        :param  build_option: rpmbuild option
 
         :return final_dir: path of ready-to-build directory
         """
@@ -276,21 +261,17 @@ class YumBackend(RpmBackend):
                         path,
                         next(os.walk(path))[2],
                     )
-                    return ""
-                if self.rpm_install(os.path.join(path, src_rpms[-1])):
+                elif self.rpm_install(os.path.join(path, src_rpms[-1])):
                     spec_path = os.path.join(
                         os.environ["HOME"], "rpmbuild", "SPECS", f"{name}.spec"
                     )
                     if self.build_dep(spec_path):
                         return self.prepare_source(spec_path, dest_path, build_option)
-                    else:
-                        log.error("Installing build dependencies failed")
-                        return ""
+                    log.error("Installing build dependencies failed")
                 else:
                     log.error("Installing source rpm failed")
-                    return ""
             except process.CmdError as details:
                 log.error(details)
-                return ""
+            return ""
         finally:
             shutil.rmtree(path)

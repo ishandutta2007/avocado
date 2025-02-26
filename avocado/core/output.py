@@ -17,6 +17,7 @@ Manages output and logging in avocado applications.
 """
 import errno
 import logging
+import logging.handlers
 import os
 import re
 import sys
@@ -84,12 +85,15 @@ class TermSupport:
         self.enabled = True
         allowed_terms = [
             "linux",
-            "xterm",
-            "xterm-256color",
-            "vt100",
+            "rxvt-unicode",
+            "rxvt-unicode-256color",
             "screen",
             "screen-256color",
             "screen.xterm-256color",
+            "vt100",
+            "xterm",
+            "xterm-256color",
+            "xterm-kitty",
         ]
         term = os.environ.get("TERM")
         config = settings.as_dict()
@@ -102,8 +106,8 @@ class TermSupport:
                 self.disable()
         elif force_color != "always":
             raise ValueError(
-                "The value for runner.output.color must be one of "
-                "'always', 'never', 'auto' and not " + force_color
+                f"The value for runner.output.color must be one of "
+                f"'always', 'never', 'auto' and not {force_color}"
             )
 
     def disable(self):
@@ -131,7 +135,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return self.HEADER + msg + self.ENDC
+        return f"{self.HEADER}{msg}{self.ENDC}"
 
     def fail_header_str(self, msg):
         """
@@ -139,7 +143,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return self.FAIL + msg + self.ENDC
+        return f"{self.FAIL}{msg}{self.ENDC}"
 
     def warn_header_str(self, msg):
         """
@@ -147,7 +151,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return self.WARN + msg + self.ENDC
+        return f"{self.WARN}{msg}{self.ENDC}"
 
     def healthy_str(self, msg):
         """
@@ -155,7 +159,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return self.PASS + msg + self.ENDC
+        return f"{self.PASS}{msg}{self.ENDC}"
 
     def partial_str(self, msg):
         """
@@ -163,7 +167,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return self.PARTIAL + msg + self.ENDC
+        return f"{self.PARTIAL}{msg}{self.ENDC}"
 
     def pass_str(self, msg="PASS", move=MOVE_BACK):
         """
@@ -171,7 +175,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.PASS + msg + self.ENDC
+        return f"{move}{self.PASS}{msg}{self.ENDC}"
 
     def skip_str(self, msg="SKIP", move=MOVE_BACK):
         """
@@ -179,7 +183,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.SKIP + msg + self.ENDC
+        return f"{move}{self.SKIP}{msg}{self.ENDC}"
 
     def fail_str(self, msg="FAIL", move=MOVE_BACK):
         """
@@ -187,7 +191,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.FAIL + msg + self.ENDC
+        return f"{move}{self.FAIL}{msg}{self.ENDC}"
 
     def error_str(self, msg="ERROR", move=MOVE_BACK):
         """
@@ -195,7 +199,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.ERROR + msg + self.ENDC
+        return f"{move}{self.ERROR}{msg}{self.ENDC}"
 
     def interrupt_str(self, msg="INTERRUPT", move=MOVE_BACK):
         """
@@ -203,7 +207,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.INTERRUPT + msg + self.ENDC
+        return f"{move}{self.INTERRUPT}{msg}{self.ENDC}"
 
     def warn_str(self, msg="WARN", move=MOVE_BACK):
         """
@@ -211,7 +215,7 @@ class TermSupport:
 
         If the output does not support colors, just return the original string.
         """
-        return move + self.WARN + msg + self.ENDC
+        return f"{move}{self.WARN}{msg}{self.ENDC}"
 
 
 #: Transparently handles colored terminal, when one is used
@@ -245,7 +249,6 @@ TEST_STATUS_DECORATOR_MAPPING = {
 
 
 class _StdOutputFile:
-
     """
     File-like object which stores (_is_stdout, content) into the provided list
     """
@@ -296,7 +299,6 @@ class _StdOutputFile:
 
 
 class StdOutput:
-
     """
     Class to modify sys.stdout/sys.stderr
     """
@@ -427,7 +429,7 @@ def del_last_configuration():
 
 
 def split_loggers_and_levels(loggers):
-    """Separates logger names and legger levels.
+    """Separates logger names and logger levels.
 
     :param loggers: Logger names with or without levels
     :type loggers: List of strings in format STREAM[:LEVEL][,STREAM[:LEVEL][,...]]
@@ -573,7 +575,6 @@ class FilterTestMessageOnly(logging.Filter):
 
 
 class ProgressStreamHandler(logging.StreamHandler):
-
     """
     Handler class that allows users to skip new lines on each emission.
     """
@@ -604,7 +605,6 @@ class ProgressStreamHandler(logging.StreamHandler):
 
 
 class MemStreamHandler(logging.StreamHandler):
-
     """
     Handler that stores all records in self.log (shared in all instances)
     """
@@ -621,7 +621,6 @@ class MemStreamHandler(logging.StreamHandler):
 
 
 class Paginator:
-
     """
     Paginator that uses less to display contents on the terminal.
 
@@ -668,6 +667,7 @@ def add_log_handler(
     level=logging.DEBUG,
     fmt="%(name)s: %(message)s",
     handler_filter=None,
+    buffer_size=0,
 ):
     """
     Add handler to a logger.
@@ -680,6 +680,9 @@ def add_log_handler(
     :param level: Log level (defaults to `INFO``)
     :param fmt: Logging format (defaults to ``%(name)s: %(message)s``)
     :param handler_filter: Logging filter class based on logging.Filter
+    :param buffer_size: whether to add a layer of memory based buffering with
+                        a given number of entries.  If <= 0, buffering is
+                        disabled.
     """
 
     def save_handler(logger_name, handler):
@@ -702,6 +705,11 @@ def add_log_handler(
     if handler_filter:
         handler.addFilter(handler_filter)
 
+    if klass == logging.FileHandler and buffer_size > 0:
+        buffered_wrapper = logging.handlers.MemoryHandler(buffer_size)
+        buffered_wrapper.setTarget(handler)
+        handler = buffered_wrapper
+
     logger.addHandler(handler)
     save_handler(logger.name, handler)
     return handler
@@ -719,7 +727,6 @@ def disable_log_handler(logger):
 
 
 class Throbber:
-
     """
     Produces a spinner used to notify progress in the application UI.
     """
@@ -728,10 +735,10 @@ class Throbber:
     # Only print a throbber when we're on a terminal
     if TERM_SUPPORT.enabled:
         MOVES = [
-            TERM_SUPPORT.MOVE_BACK + STEPS[0],
-            TERM_SUPPORT.MOVE_BACK + STEPS[1],
-            TERM_SUPPORT.MOVE_BACK + STEPS[2],
-            TERM_SUPPORT.MOVE_BACK + STEPS[3],
+            f"{TERM_SUPPORT.MOVE_BACK}{STEPS[0]}",
+            f"{TERM_SUPPORT.MOVE_BACK}{STEPS[1]}",
+            f"{TERM_SUPPORT.MOVE_BACK}{STEPS[2]}",
+            f"{TERM_SUPPORT.MOVE_BACK}{STEPS[3]}",
         ]
     else:
         MOVES = ["", "", "", ""]

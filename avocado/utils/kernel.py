@@ -20,18 +20,22 @@ Provides utilities for the Linux kernel.
 import logging
 import multiprocessing
 import os
+import re
 import shutil
 import tempfile
-
-from pkg_resources import packaging
 
 from avocado.utils import archive, asset, build, distro, process
 
 LOG = logging.getLogger(__name__)
 
 
-class KernelBuild:
+class KernelBuildError(Exception):
+    """
+    Exception raised when there is an error building the kernel.
+    """
 
+
+class KernelBuild:
     """
     Build the Linux Kernel from official tarballs.
     """
@@ -119,7 +123,7 @@ class KernelBuild:
             LOG.info("Uncompressing tarball")
             archive.extract(self.asset_path, self.work_dir)
         else:
-            raise Exception("Unable to find the tarball")
+            raise KernelBuildError("Unable to find the tarball")
 
     def configure(self, targets=("defconfig"), extra_configs=None):
         """
@@ -199,6 +203,13 @@ class KernelBuild:
         shutil.rmtree(self.work_dir)
 
 
+def _parse_kernel_version(version):
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)-(\d+).*", version)
+    if match:
+        return tuple(map(int, match.groups()))
+    raise AssertionError(f'Malformed kernel version "{version}"')
+
+
 def check_version(version):
     """
     This utility function compares the current kernel version with
@@ -208,6 +219,6 @@ def check_version(version):
     :type version: string
     :param version: version to be compared with current kernel version
     """
-    os_version = packaging.version.parse(os.uname()[2])
-    version = packaging.version.parse(version)
+    os_version = _parse_kernel_version(os.uname()[2])
+    version = _parse_kernel_version(version)
     assert os_version > version, "Old kernel"

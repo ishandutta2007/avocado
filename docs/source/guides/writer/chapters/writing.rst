@@ -29,6 +29,13 @@ leveraging its API power.
 As can be seen in the example above, an Avocado test is a method that starts
 with ``test`` in a class that inherits from :mod:`avocado.Test`.
 
+.. warning:: Note that combining unittests and avocado-instrumented tests within
+             the same file is not feasible. If a class inherits from :mod:`avocado.Test`,
+             and another class inherits from :class:`unittest.TestCase` in the same file,
+             the unittest class will be excluded from testing. In such instances, it is
+             advisable to segregate these tests into separate files.
+
+
 .. note:: Avocado also supports coroutines as tests.  Simply declare
           your test method using the ``async def`` syntax, and Avocado
           will run it inside an asyncio loop.
@@ -514,69 +521,20 @@ Running third party test suites
 It is very common in test automation workloads to use test suites developed
 by third parties. By wrapping the execution code inside an Avocado test module,
 you gain access to the facilities and API provided by the framework. Let's
-say you want to pick up a test suite written in C that it is in a tarball,
-uncompress it, compile the suite code, and then executing the test. Here's
-an example that does that::
+say you want to pick up a test written in C, compile the test code,
+and then execute it. Here's an example that does that:
 
-        #!/usr/bin/env python3
+.. literalinclude:: ../../../../../examples/tests/raise.py
 
-        import os
+Here we have an example of the ``setUp`` method in action: Here we get
+the location of the test code written in C through :meth:`get_data()
+<avocado.core.test.TestData.get_data>`, followed by
+:func:`avocado.utils.build.make`, that will build the suite.
 
-        from avocado import Test
-        from avocado.utils import archive, build, process
-
-
-        class SyncTest(Test):
-
-            """
-            Execute the synctest test suite.
-
-            :param sync_tarball: path to the tarball relative to a data directory
-            :param default_symbols: whether to build with debug symbols (bool)
-            :param sync_length: how many data should by used in sync test
-            :param sync_loop: how many writes should be executed in sync test
-            """
-
-            def setUp(self):
-                """
-                Build the synctest suite.
-                """
-                self.cwd = os.getcwd()
-                sync_tarball = self.params.get('sync_tarball', '*', 'synctest.tar.bz2')
-                tarball_path = self.get_data(sync_tarball)
-                if tarball_path is None:
-                    self.cancel('Test is missing data file %s' % tarball_path)
-                archive.extract(tarball_path, self.workdir)
-                srcdir = os.path.join(self.workdir, 'synctest')
-                os.chdir(srcdir)
-                if self.params.get('debug_symbols', default=True):
-                    build.make(srcdir,
-                               env={'CFLAGS': '-g -O0'},
-                               extra_args='synctest')
-                else:
-                    build.make(srcdir)
-
-            def test(self):
-                """
-                Execute synctest with the appropriate params.
-                """
-                path = os.path.join(os.getcwd(), 'synctest')
-                cmd = ('%s %s %s' %
-                       (path, self.params.get('sync_length', default=100),
-                        self.params.get('sync_loop', default=10)))
-                process.system(cmd)
-                os.chdir(self.cwd)
-
-Here we have an example of the ``setUp`` method in action: Here we get the
-location of the test suite code (tarball) through
-:func:`avocado.Test.get_data`, then uncompress the tarball through
-:func:`avocado.utils.archive.extract`, an API that will
-decompress the suite tarball, followed by :func:`avocado.utils.build.make`, that will build
-the suite.
-
-In this example, the ``test`` method just gets into the base directory of
-the compiled suite  and executes the ``./synctest`` command, with appropriate
-parameters, using :func:`avocado.utils.process.system`.
+In this example, the ``test`` method just gets into the base directory
+of the compiled test and executes the ``./raise`` command, with
+appropriate parameters (the actual signal to raise), using
+:func:`avocado.utils.process.system`.
 
 .. _Fetching asset files:
 
@@ -793,53 +751,64 @@ Setting a Test Timeout
 Sometimes your test suite/test might get stuck forever, and this might
 impact your test grid. You can account for that possibility and set up a
 ``timeout`` parameter for your test. The test timeout can be set through
-the test parameters, as shown below.
+test parameters.  The included example "sleep test" contains a default
+sleep time of 1 second.
 
-::
+.. literalinclude:: ../../../../../examples/tests/sleeptest.py
 
-    sleep_length: 5
-    timeout: 3
+Which can be run with a timeout (shorter the sleep time) with::
 
-
-::
-
-    $ avocado run examples/tests/sleeptest.py --mux-yaml /tmp/sleeptest-example.yaml
-    JOB ID     : c78464bde9072a0b5601157989a99f0ba32a288e
-    JOB LOG    : $HOME/avocado/job-results/job-2016-11-02T11.13-c78464b/job.log
-        (1/1) examples/tests/sleeptest.py:SleepTest.test;run-0fc1: STARTED
-        (1/1) examples/tests/sleeptest.py:SleepTest.test;run-0fc1: INTERRUPTED: timeout (3.01 s)
+    $ avocado run -p timeout=0.5 examples/tests/sleeptest.py
+    JOB ID     : 01f7e7e9ee82a331c1c6a6b3a939f694d9c0c948
+    JOB LOG    : $HOME/avocado/job-results/job-2016-11-02T11.13-01f7e7e/job.log
+        (1/1) examples/tests/sleeptest.py:SleepTest.test: STARTED
+        (1/1) examples/tests/sleeptest.py:SleepTest.test: INTERRUPTED: Test interrupted: Timeout reached (0.53 s)
     RESULTS    : PASS 0 | ERROR 0 | FAIL 0 | SKIP 0 | WARN 0 | INTERRUPT 1
-    JOB TIME   : 3.14 s
-    JOB HTML   : $HOME/avocado/job-results/job-2016-11-02T11.13-c78464b/html/results.html
+    JOB TIME   : 2.14 s
+    JOB HTML   : $HOME/avocado/job-results/job-2016-11-02T11.13-01f7e7e/html/results.html
 
-
-::
-
-	$ cat $HOME/avocado/job-results/job-2016-11-02T11.13-c78464b/job.log
-	2021-10-01 15:44:53,622 job              L0319 INFO | Multiplex tree representation:
-    2021-10-01 15:44:53,622 job              L0319 INFO |  \-- run
-    2021-10-01 15:44:53,622 job              L0319 INFO |
-    2021-10-01 15:44:53,622 job              L0319 INFO | Multiplex variants (1):
-    2021-10-01 15:44:53,622 job              L0319 INFO | Variant run-0fc1:    /run
-    2021-10-01 15:44:53,622 job              L0312 INFO | Temporary dir: /tmp/avocado_tmp_hp4cswyn/avocado_job_pmn___6i
-    2021-10-01 15:44:53,622 job              L0313 INFO |
-    2021-10-01 15:44:53,622 job              L0306 INFO | Job ID: 927fdc4143e9e093a485319820825faacc0f36a3
-    2021-10-01 15:44:53,622 job              L0309 INFO |
-    2021-10-01 15:44:54,165 selector_events  L0059 DEBUG| Using selector: EpollSelector
-    2021-10-01 15:44:54,622 testlogs         L0094 INFO | examples/tests/sleeptest.py:SleepTest.test;run-0fc1: STARTED
-    2021-10-01 15:44:57,653 testlogs         L0101 INFO | examples/tests/sleeptest.py:SleepTest.test;run-0fc1: INTERRUPTED
-    2021-10-01 15:44:57,654 testlogs         L0103 INFO | More information in /home/jarichte/avocado/job-results/job-2021-10-01T15.44-927fdc4/test-results/1-examples_tests_sleeptest.py_SleepTest.test_run-0fc1
-    2021-10-01 15:44:57,762 job              L0643 INFO | Test results available in /home/jarichte/avocado/job-results/job-2021-10-01T15.44-927fdc4
-
-
-
-The YAML file defines a test parameter ``timeout`` which overrides
-the default test timeout. When the timeout is reached, the spawner
-will terminate the test runner task, making it raise a
+When the timeout is reached, the spawner will terminate the test
+runner task, making it raise a
 :class:`avocado.core.exceptions.TestInterruptedError`. The termination
-process is specific to spawner implementation, for more information see
-:class:`avocado.core.plugin_interfaces.Spawner.terminate_task`.
+process is specific to spawner implementation, for more information
+see :class:`avocado.core.plugin_interfaces.Spawner.terminate_task`.
 
+Timeout Factor
+~~~~~~~~~~~~~~
+
+Like it was mentioned before, a test may have an (adequate) timeout,
+set as a class attribute, such as in the following included example
+test:
+
+.. literalinclude:: ../../../../../examples/tests/timeouttest.py
+
+But, depending on the environment it may be executed (maybe by a
+different user, on a slower machine or more limited network), the
+hardcoded timeout won't be adequate anymore.
+
+On those circumstances, it's possible to set a "timeout factor".  This
+can be given as a parameter, and is pretty much a multiplier to the
+timeout.  Example::
+
+   $ avocado run -p timeout_factor=2.0 examples/tests/timeouttest.py
+   JOB ID     : 55722574664b01077dffd5504e329ad5e0062cc8
+   JOB LOG    : $HOME/avocado/job-results/job-2023-11-29T11.16-5572257/job.log
+    (1/1) examples/tests/timeouttest.py:TimeoutTest.test: STARTED
+    (1/1) examples/tests/timeouttest.py:TimeoutTest.test: PASS (5.01 s)
+   RESULTS    : PASS 1 | ERROR 0 | FAIL 0 | SKIP 0 | WARN 0 | INTERRUPT 0 | CANCEL 0
+   JOB HTML   : $HOME/avocado/job-results/job-2023-11-29T11.16-5572257/results.html
+   JOB TIME   : 7.77 s
+
+Notice how, under normal circumstances, the test would have timed out,
+due to the sleep time (5.0 seconds) being larger than the timeout set
+in the class attribute (``timeout = 3``).
+
+The actual timeout will be given in the "Test metadata" section in
+test logs.  For the previous test execution it shows::
+
+   [stdlog] 2023-11-29 11:16:23,745 test             L0345 DEBUG| Test metadata:
+   ...
+   [stdlog] 2023-11-29 11:16:23,746 test             L0354 DEBUG|   actual timeout: 6.0
 
 Skipping Tests
 --------------
@@ -1274,20 +1243,12 @@ from an outside source (say a "pickle" file).  Finding and using a
 reliable and safe location for saving such data is currently not in
 the Avocado supported use cases.
 
-.. _environment-variables-for-tests:
 
 Environment Variables for Tests
 -------------------------------
 
 Avocado exports some information, including test parameters, as environment
 variables to the running test.
-
-The availability of the variable depends on the test type. A greater set of
-variables are available to avocado-instrumented tests, while a reduced number of
-variables are available to EXEC tests. Although the availability of the
-variable, they are usually more interesting to EXEC tests. The reason is that
-EXEC tests can not make direct use of Avocado API. avocado-instrumented tests will
-usually have more powerful ways to access the same information.
 
 Here is a list of the variables that Avocado currently exports to avocado-instrumented
 tests:
@@ -1297,9 +1258,11 @@ tests:
 +=============================+=======================================+=====================================================================================================+
 | AVOCADO_VERSION             | Version of Avocado test runner        | 92.0                                                                                                |
 +-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_BASEDIR        | Base directory of Avocado tests       | $HOME/src/avocado/avocado.dev/examples/tests                                                        |
+| AVOCADO_TEST_BASEDIR        | Base directory of Avocado tests. More | $HOME/src/avocado/avocado.dev/examples/tests                                                        |
+|                             | info in :data:`avocado.Test.basedir`  |                                                                                                     |
 +-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_WORKDIR        | Work directory for the test           | /var/tmp/.avocado-taskcx8of8di/test-results/tmp_dirfgqrnbu/1-Env.test                              |
+| AVOCADO_TEST_WORKDIR        | Work directory for the test. More     | /var/tmp/.avocado-taskcx8of8di/test-results/tmp_dirfgqrnbu/1-Env.test                               |
+|                             | info in :data:`avocado.Test.workdir`  |                                                                                                     |
 +-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
 | AVOCADO_TESTS_COMMON_TMPDIR | Temporary directory created by the    | /var/tmp/avocado_cp07qzd9                                                                           |
 |                             | :ref:`plugin_teststmpdir` plugin.  The|                                                                                                     |
@@ -1314,56 +1277,6 @@ tests:
 +-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
 | `***`                       | All variables from --mux-yaml         | TIMEOUT=60; IO_WORKERS=10; VM_BYTES=512M; ...                                                       |
 +-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-
-Here is a list of the variables that Avocado currently exports to exec-test
-tests:
-
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| Environment Variable        | Meaning                               | Example                                                                                             |
-+=============================+=======================================+=====================================================================================================+
-| AVOCADO_VERSION             | Version of Avocado test runner        | 92.0                                                                                                |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_BASEDIR        | Base directory of Avocado tests       | $HOME/src/avocado/avocado.dev/examples/tests                                                        |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_WORKDIR        | Work directory for the test           | /var/tmp/.avocado-taskcx8of8di/test-results/tmp_dirfgqrnbu/1-Env.test                              |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TESTS_COMMON_TMPDIR | Temporary directory created by the    | /var/tmp/avocado_XhEdo/                                                                             |
-|                             | :ref:`plugin_teststmpdir` plugin.  The|                                                                                                     |
-|                             | directory is persistent throughout the|                                                                                                     |
-|                             | tests in the same Job                 |                                                                                                     |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_LOGDIR         | Log directory for the test            | /var/tmp/.avocado-task_5t_srpn/test-results/1-Env.test                                              |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_LOGFILE        | Log file for the test                 | /var/tmp/.avocado-taskcx8of8di/test-results/1-Env.test/debug.log                                    |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| AVOCADO_TEST_OUTPUTDIR      | Output directory for the test         | /var/tmp/.avocado-taskcx8of8di/test-results/1-Env.test/data                                         |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-| `***`                       | All variables from --mux-yaml         | TIMEOUT=60; IO_WORKERS=10; VM_BYTES=512M; ...                                                       |
-+-----------------------------+---------------------------------------+-----------------------------------------------------------------------------------------------------+
-
-
-SIMPLE Tests BASH extensions
-----------------------------
-
-SIMPLE tests written in shell can use a few Avocado utilities.  In your
-shell code, check if the libraries are available with something like::
-
-  AVOCADO_SHELL_EXTENSIONS_DIR=$(avocado exec-path 2>/dev/null)
-
-And if available, injects that directory containing those utilities
-into the PATH used by the shell, making those utilities readily
-accessible::
-
-  if [ $? == 0 ]; then
-    PATH=$AVOCADO_SHELL_EXTENSIONS_DIR:$PATH
-  fi
-
-For a full list of utilities, take a look into at the directory return
-by ``avocado exec-path`` (if any).  Also, the example test
-``examples/tests/simplewarning.sh`` can serve as further inspiration.
-
-.. tip:: These extensions may be available as a separate package.  For
-         RPM packages, look for the ``bash`` sub-package.
 
 .. _docstring-directive-rules:
 

@@ -32,6 +32,25 @@ class RuntimeTaskMixin:
     """Common utilities for RuntimeTask implementations."""
 
     @classmethod
+    def get_identifier(
+        cls,
+        runnable,
+        no_digits,
+        index,
+        test_suite_name=None,
+    ):
+        if test_suite_name:
+            prefix = f"{test_suite_name}-{index}"
+        else:
+            prefix = index
+        if cls.category is TASK_DEFAULT_CATEGORY:
+            name = runnable.identifier
+        else:
+            name = f'{runnable.kind}-{runnable.kwargs.get("name")}'
+
+        return TestID(prefix, name, runnable.variant, no_digits)
+
+    @classmethod
     def from_runnable(
         cls,
         runnable,
@@ -63,22 +82,12 @@ class RuntimeTaskMixin:
                        make into the job's results.
         :type job_id: str
         :param satisfiable_deps_execution_statuses: The dependency result types that
-        satisfy the execution of this RuntimeTask.
+                                                    satisfy the execution of this
+                                                    RuntimeTask.
         :type satisfiable_deps_execution_statuses: list of test results.
         :returns: RuntimeTask of the test from runnable
         """
-
-        # create test ID
-        if test_suite_name:
-            prefix = f"{test_suite_name}-{index}"
-        else:
-            prefix = index
-        if cls.category is TASK_DEFAULT_CATEGORY:
-            name = runnable.identifier
-        else:
-            name = f'{runnable.kind}-{runnable.kwargs.get("name")}'
-
-        test_id = TestID(prefix, name, runnable.variant, no_digits)
+        test_id = cls.get_identifier(runnable, no_digits, index, test_suite_name)
 
         if not runnable.output_dir:
             runnable.output_dir = os.path.join(base_dir, test_id.str_filesystem)
@@ -111,7 +120,8 @@ class RuntimeTask(RuntimeTaskMixin):
         :param task: The task to keep additional information about
         :type task: :class:`avocado.core.nrunner.Task`
         :param satisfiable_deps_execution_statuses: The dependency result types that
-        satisfy the execution of this RuntimeTask.
+                                                    satisfy the execution of this
+                                                    RuntimeTask.
         :type satisfiable_deps_execution_statuses: list of test results.
         """
         #: The :class:`avocado.core.nrunner.Task`

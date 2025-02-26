@@ -49,15 +49,6 @@ It uses Avocado in its `ftest
 <https://github.com/daos-stack/daos/blob/master/src/tests/ftest/avocado_tests.py>`__
 test suite.
 
-Falco
-~~~~~
-
-`Falco <https://falco.org/>`__, the cloud-native runtime security
-project, is the de facto Kubernetes threat detection engine.
-
-It uses Avocado in its `regression test suite
-<https://github.com/falcosecurity/falco/tree/master/test#falco-regression-tests>`__.
-
 RUDDER
 ~~~~~~
 
@@ -81,6 +72,17 @@ It uses Avocado in its `unitary
 and `multiprocessing unitary
 <https://github.com/pok-kernel/pok/tree/main/testsuite/multiprocessing_unitary_tests>`__
 tests.
+
+isar
+~~~~
+
+`isar <https://github.com/ilbers/isar>`__ is the "Integration System
+for Automated Root filesystem generation".  It is a set of scripts for
+building software packages and repeatable generation of Debian-based
+root filesystems with customizations.
+
+It is used in the project's `test suite
+<https://github.com/ilbers/isar/tree/master/testsuite#install-avocado>`__.
 
 Avocado extensions
 ------------------

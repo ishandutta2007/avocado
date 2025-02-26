@@ -36,6 +36,7 @@ VENDORS_MAP = {
     "ibm": (
         rb"POWER\d",
         rb"IBM/S390",
+        rb"Power\d",
     ),
 }
 
@@ -112,7 +113,7 @@ def cpu_has_flags(flags):
         flags = [flags]
 
     for flag in flags:
-        if not any([flag.encode() in line for line in cpu_info]):
+        if not any(flag.encode() in line for line in cpu_info):
             return False
     return True
 
@@ -179,11 +180,26 @@ def get_revision():
     return rev
 
 
+def get_va_bits():
+    """
+    Check for VA address bit size in /proc/cpuinfo
+
+    :return: VA address bit size
+    :rtype: str
+    """
+    cpu_info = genio.read_file("/proc/cpuinfo")
+    for line in cpu_info.splitlines():
+        if "address sizes" in line:
+            return line.split()[-3].strip()
+    return ""
+
+
 def get_arch():
     """Work out which CPU architecture we're running on."""
     cpu_table = [
         (b"^cpu.*(RS64|Broadband Engine)", "powerpc"),
         (rb"^cpu.*POWER\d+", "powerpc"),
+        (rb"^cpu.*Power\d+", "powerpc"),
         (b"^cpu.*PPC970", "powerpc"),
         (
             b"(ARM|^CPU implementer|^CPU part|^CPU variant"
@@ -201,20 +217,19 @@ def get_arch():
         (b"^hart\\s*: 1$", "riscv"),
     ]
     cpuinfo = _get_info()
-    for (pattern, arch) in cpu_table:
+    for pattern, arch in cpu_table:
         if _list_matches(cpuinfo, pattern):
-            if arch == "arm":
-                # ARM is a special situation, which matches both 32 bits
-                # (v7) and 64 bits (v8).
-                for line in cpuinfo:
-                    if line.startswith(b"CPU architecture"):
-                        version = int(line.split(b":", 1)[1])
-                        if version >= 8:
-                            return "aarch64"
-                        else:
-                            # For historical reasons return arm
-                            return "arm"
-            return arch
+            if arch != "arm":
+                return arch
+            # ARM is a special situation, which matches both 32 bits
+            # (v7) and 64 bits (v8).
+            for line in cpuinfo:
+                if line.startswith(b"CPU architecture"):
+                    version = int(line.split(b":", 1)[1])
+                    if version >= 8:
+                        return "aarch64"
+                    # For historical reasons return arm
+                    return "arm"
     return platform.machine()
 
 
@@ -222,9 +237,15 @@ def get_family():
     """Get family name of the cpu like Broadwell, Haswell, power8, power9."""
     family = None
     arch = get_arch()
-    if arch == "x86_64" or arch == "i386":
+    if arch in ("x86_64", "i386"):
         if get_vendor() == "amd":
-            raise NotImplementedError
+            cpu_info = _get_info()
+            pattern = r"cpu family\s*:"
+            for line in cpu_info:
+                line = line.decode("utf-8")
+                if re.search(pattern, line):
+                    family = int(line.split(":")[1])
+                    return family
         try:
             # refer below links for microarchitectures names
             # https://en.wikipedia.org/wiki/List_of_Intel_CPU_microarchitectures
@@ -236,30 +257,79 @@ def get_family():
         except FileNotFoundError as err:
             msg = f"Could not find micro-architecture/family, Error: {err}"
             LOG.warning(msg)
-            raise FamilyException(msg)
+            raise FamilyException(msg) from err
     elif arch == "powerpc":
         res = []
         try:
             for line in _get_info():
-                res = re.findall(rb"cpu\s+:\s+(POWER\d+)", line)
+                res = re.findall(rb"cpu\s+:\s+(POWER\d+|Power\d+)", line, re.IGNORECASE)
                 if res:
                     break
             family = res[0].decode("utf-8").lower()
         except IndexError as err:
             msg = f"Unable to parse cpu family {err}"
             LOG.warning(msg)
-            raise FamilyException(msg)
+            raise FamilyException(msg) from err
     elif arch == "s390":
-        zfamily_map = {"2964": "z13", "3906": "z14", "8561": "z15"}
+        zfamily_map = {"2964": "z13", "3906": "z14", "8561": "z15", "3931": "z16"}
         try:
             family = zfamily_map[get_version()].lower()
         except KeyError as err:
             msg = f"Could not find family for {get_version()}\nError: {err}"
             LOG.warning(msg)
-            raise FamilyException(msg)
+            raise FamilyException(msg) from err
     else:
         raise NotImplementedError
     return family
+
+
+def get_model():
+    """
+    Get model of cpu
+    """
+    arch = get_arch()
+    if arch == "x86_64":
+        cpu_info = _get_info()
+        pattern = r"model\s*:"
+        for line in cpu_info:
+            line = line.decode("utf-8")
+            if re.search(pattern, line):
+                model = int(line.split(":")[1])
+                return model
+        return None
+    raise NotImplementedError
+
+
+def get_x86_amd_zen(family=None, model=None):
+    """
+    :param family: AMD family
+    :type family: int
+    :param model: AMD model
+    :type model: int
+
+    :return: AMD Zen
+    :rtype: int
+    """
+
+    x86_amd_zen = {
+        0x17: {
+            1: [(0x00, 0x2F), (0x50, 0x5F)],
+            2: [(0x30, 0x4F), (0x60, 0x7F), (0x90, 0x91), (0xA0, 0xAF)],
+        },
+        0x19: {3: [(0x00, 0x0F), (0x20, 0x5F)], 4: [(0x10, 0x1F), (0x60, 0xAF)]},
+        0x1A: {5: [(0x00, 0x0F), (0x20, 0x2F), (0x40, 0x4F), (0x70, 0x7F)]},
+    }
+    if not family:
+        family = get_family()
+    if not model:
+        model = get_model()
+
+    for _family, _zen_model in x86_amd_zen.items():
+        if _family == family:
+            for _zen, _model in _zen_model.items():
+                if any(lower <= model <= upper for (lower, upper) in _model):
+                    return _zen
+    return None
 
 
 def online_list():
@@ -332,9 +402,8 @@ def get_idle_state():
                 f"/sys/devices/system/cpu/cpu{cpu}/cpuidle/state{state_no}/disable"
             )
             try:
-                cpu_idlestate[cpu][state_no] = bool(
-                    int(open(state_file, "rb").read())
-                )  # pylint: disable=W1514
+                with open(state_file, "rb") as fl:  # pylint: disable=W1514
+                    cpu_idlestate[cpu][state_no] = bool(int(fl.read()))
             except IOError as err:
                 LOG.warning(
                     "Failed to read idle state on cpu %s for state %s:\n%s",
@@ -386,7 +455,8 @@ def set_idle_state(state_number="all", disable=True, setstate=None):
                     f"/sys/devices/system/cpu/cpu{cpu}/cpuidle/state{state_no}/disable"
                 )
                 try:
-                    open(state_file, "wb").write(disable)  # pylint: disable=W1514
+                    with open(state_file, "wb") as fl:  # pylint: disable=W1514
+                        fl.write(disable)
                 except IOError as err:
                     LOG.warning(
                         "Failed to set idle state on cpu %s for state %s:\n%s",
@@ -402,7 +472,8 @@ def set_idle_state(state_number="all", disable=True, setstate=None):
                 )
                 disable = _bool_to_binary(value)
                 try:
-                    open(state_file, "wb").write(disable)  # pylint: disable=W1514
+                    with open(state_file, "wb") as fl:  # pylint: disable=W1514
+                        fl.write(disable)
                 except IOError as err:
                     LOG.warning(
                         "Failed to set idle state on cpu %s for state %s:\n%s",
@@ -500,9 +571,10 @@ def get_numa_node_has_cpus():
     Get the list NUMA node numbers which has CPU's on the system,
     if there is no CPU associated to NUMA node,Those NUMA node number
     will not be appended to list.
+
     :return: A list where NUMA node numbers only which has
              CPU's - as elements of The list.
-    :rtype : List
+    :rtype: List
     """
     cpu_path = "/sys/devices/system/node/has_cpu"
     delim = ",", "-"
@@ -515,9 +587,10 @@ def get_numa_node_has_cpus():
 def numa_nodes_with_assigned_cpus():
     """
     Get NUMA nodes with associated CPU's on the system.
+
     :return: A dictionary,in which "NUMA node numbers" as key
              and "NUMA node associated CPU's" as values.
-    :rtype : dictionary
+    :rtype: dictionary
     """
     numa_nodes_with_cpus = {}
     for path in glob.glob("/sys/devices/system/node/node[0-9]*"):
@@ -561,17 +634,27 @@ def lscpu():
     :physical chips:
     :chips: physical sockets * physical chips
     """
-    output = process.run("lscpu")
+    output = process.run("LANG=en_US.UTF-8;lscpu", shell=True)
     res = {}
     for line in output.stdout.decode("utf-8").split("\n"):
+        if "Physical cores/chip:" in line:
+            res["cores_per_chip"] = int(line.split(":")[1].strip())
         if "Core(s) per socket:" in line:
-            res["cores"] = int(line.split(":")[1].strip())
+            res["virtual_cores"] = int(line.split(":")[1].strip())
         if "Physical sockets:" in line:
             res["physical_sockets"] = int(line.split(":")[1].strip())
         if "Physical chips:" in line:
             res["physical_chips"] = int(line.split(":")[1].strip())
     if "physical_sockets" in res and "physical_chips" in res:
         res["chips"] = res["physical_sockets"] * res["physical_chips"]
+    if (
+        "physical_sockets" in res
+        and "physical_chips" in res
+        and "cores_per_chip" in res
+    ):
+        res["physical_cores"] = (
+            res["physical_sockets"] * res["physical_chips"] * res["cores_per_chip"]
+        )
     return res
 
 

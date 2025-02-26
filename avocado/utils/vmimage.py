@@ -16,6 +16,7 @@
 Provides VM images acquired from official repositories
 """
 
+import logging
 import os
 import re
 import tempfile
@@ -28,6 +29,8 @@ from urllib.request import urlopen
 from avocado.utils import archive, asset, astring
 from avocado.utils import path as utils_path
 from avocado.utils import process
+
+LOG = logging.getLogger(__name__)
 
 # pylint: disable=C0401
 #: The "qemu-img" binary used when creating the snapshot images.  If
@@ -74,6 +77,7 @@ class VMImageHtmlParser(HTMLParser):  # pylint: disable=W0223
                     self.items.append(match)
 
 
+# pylint: disable=R0902
 class ImageProviderBase:
     """
     Base class to define the common methods and attributes of an
@@ -111,10 +115,11 @@ class ImageProviderBase:
 
     def _feed_html_parser(self, url, parser):
         try:
-            data = urlopen(url).read()
+            with urlopen(url) as u:
+                data = u.read()
             parser.feed(astring.to_text(data, self.HTML_ENCODING))
-        except HTTPError:
-            raise ImageProviderError(f"Cannot open {self.url_versions}")
+        except HTTPError as exc:
+            raise ImageProviderError(f"Cannot open {url}") from exc
 
     @staticmethod
     def get_best_version(versions):
@@ -149,10 +154,7 @@ class ImageProviderBase:
         if resulting_versions:
             self._best_version = self.get_best_version(resulting_versions)
             return self._best_version
-        else:
-            raise ImageProviderError(
-                f"Version not available at " f"{self.url_versions}"
-            )
+        raise ImageProviderError(f"Version not available at " f"{self.url_versions}")
 
     def get_image_url(self):
         """
@@ -175,10 +177,9 @@ class ImageProviderBase:
 
         if parser.items:
             return url_images + max(parser.items)
-        else:
-            raise ImageProviderError(
-                f"No images matching '{image}' " f"at '{url_images}'. Wrong arch?"
-            )
+        raise ImageProviderError(
+            f"No images matching '{image}' " f"at '{url_images}'. Wrong arch?"
+        )
 
     def get_image_parameters(self, image_file_name):
         """
@@ -212,7 +213,7 @@ class FedoraImageProviderBase(ImageProviderBase):
         else:
             cloud = "CloudImages"
 
-        if self.url_old_images and int(self.version) <= 35:
+        if self.url_old_images and int(self.version) <= 38:
             self.url_versions = self.url_old_images
 
         self.url_images = self.url_versions + "{version}/" + cloud + "/{arch}/images/"
@@ -232,7 +233,12 @@ class FedoraImageProvider(FedoraImageProviderBase):
         self.url_old_images = (
             "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/"
         )
-        self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        if int(self.version) == 40:
+            self.image_pattern = "Fedora-Cloud-Base-Generic.(?P<arch>{arch})-(?P<version>{version})-(?P<build>{build}).qcow2$"
+        elif int(self.version) >= 41:
+            self.image_pattern = "Fedora-Cloud-Base-Generic-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        else:
+            self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
 
 
 class FedoraSecondaryImageProvider(FedoraImageProviderBase):
@@ -251,7 +257,12 @@ class FedoraSecondaryImageProvider(FedoraImageProviderBase):
         self.url_old_images = (
             "https://archives.fedoraproject.org/pub/archive/fedora-secondary/releases/"
         )
-        self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        if int(self.version) == 40:
+            self.image_pattern = "Fedora-Cloud-Base-Generic.(?P<arch>{arch})-(?P<version>{version})-(?P<build>{build}).qcow2$"
+        elif int(self.version) >= 41:
+            self.image_pattern = "Fedora-Cloud-Base-Generic-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
+        else:
+            self.image_pattern = "Fedora-Cloud-Base-(?P<version>{version})-(?P<build>{build}).(?P<arch>{arch}).qcow2$"
 
 
 class CentOSImageProvider(ImageProviderBase):
@@ -353,12 +364,11 @@ class DebianImageProvider(ImageProviderBase):
             version = "bullseye"
 
         # User provided a numerical version
-        if version in table_codename.keys():
-            version = table_codename[version]
+        version = table_codename.get(version, version)
 
         # If version is not a codename by now, it's wrong or unknown,
         # so let's fail early
-        if version not in table_version.keys():
+        if version not in table_version:
             raise ImageProviderError("Unknown version", version)
 
         super().__init__(version, build, arch)
@@ -508,6 +518,7 @@ class FreeBSDImageProvider(ImageProviderBase):
 
 
 class Image:
+    # pylint: disable=R0913, R0902
     def __init__(
         self,
         name,
@@ -582,6 +593,7 @@ class Image:
             cache_dirs = [self.cache_dir]
         else:
             cache_dirs = self.cache_dir
+        LOG.debug("Attempting to download image from URL: %s", self.url)
         asset_path = asset.Asset(
             name=self.url,
             asset_hash=self.checksum,
@@ -622,6 +634,7 @@ class Image:
         return new_image
 
     @classmethod
+    # pylint: disable=R0913
     def from_parameters(
         cls,
         name=None,
@@ -654,6 +667,9 @@ class Image:
         :returns: Image instance that can provide the image
                   according to the parameters.
         """
+        # Use the current system architecture if arch is not provided
+        if arch is None:
+            arch = DEFAULT_ARCH
         provider = get_best_provider(name, version, build, arch)
 
         if cache_dir is None:
@@ -670,12 +686,13 @@ class Image:
                 cache_dir=cache_dir,
                 snapshot_dir=snapshot_dir,
             )
-        except ImageProviderError:
-            pass
+        except ImageProviderError as e:
+            LOG.debug(e)
 
         raise AttributeError("Provider not available")
 
 
+# pylint: disable=R0913
 def get(
     name=None,
     version=None,
@@ -726,9 +743,10 @@ def get_best_provider(name=None, version=None, build=None, arch=None):
         if name is None or name == provider.name.lower():
             try:
                 return provider(**provider_args)
-            except ImageProviderError:
-                pass
+            except ImageProviderError as e:
+                LOG.debug(e)
 
+    LOG.debug("Provider for %s not available", name)
     raise AttributeError("Provider not available")
 
 

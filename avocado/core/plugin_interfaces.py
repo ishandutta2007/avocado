@@ -194,7 +194,7 @@ class PostTest(Plugin):
         :param suite_config: Configuration dict relevant for the whole suite.
         :return: PostTest task runnables created by plugin.
         :rtype: list of tuple(:class:`avocado.core.nrunner.Runnable`,
-        `avocado.core.task.runtime.RuntimeTask.possible_dependency_results`)
+                `avocado.core.task.runtime.RuntimeTask.possible_dependency_results`)
         """
 
 
@@ -372,6 +372,8 @@ class Spawner(Plugin):
         :param runtime_task: wrapper for a Task with additional runtime
                              information.
         :type runtime_task: :class:`avocado.core.task.runtime.RuntimeTask`
+        :returns: whether the task has been fully terminated or not
+        :rtype: bool
         """
 
     @staticmethod
@@ -422,6 +424,16 @@ class Spawner(Plugin):
         :type runtime_task: :class:`avocado.core.task.runtime.RuntimeTask`
         :param result: result of runtime_task
         :type result: `avocado.core.teststatus.STATUSES`
+        """
+
+    @abc.abstractmethod
+    def is_operational(self):
+        """Checks whether this spawner is operationally capable to perform.
+
+        :result: whether or not this spawner is operational on this system,
+                 that is, whether it has all its requirements set up and
+                 should be ready to operate successfully.
+        :rtype: bool
         """
 
 

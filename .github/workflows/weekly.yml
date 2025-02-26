@@ -12,11 +12,11 @@ jobs:
 
   latest-python:
     name: Linux with Python ${{ matrix.python-version }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         # see list of available Python versions at https://github.com/actions/python-versions/blob/main/versions-manifest.json
-        python-version: [3.11.0]
+        python-version: [3.11]
       fail-fast: false
     outputs:
       job_status: ${{ job.status }}
@@ -24,11 +24,11 @@ jobs:
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -47,7 +47,7 @@ jobs:
           python3 selftests/check.py
       - name: Archive test logs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: job-results-plugins
           path: /home/runner/avocado/job-results/
@@ -56,23 +56,23 @@ jobs:
 
   without-plugins-latest-python:
     name: Test with Python without plugins ${{ matrix.python-version }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: latest-python
     if: "always()&&(needs.latest-python.outputs.job_status=='failure')"
     strategy:
       matrix:
         # see list of available Python versions at https://github.com/actions/python-versions/blob/main/versions-manifest.json
-        python-version: [3.11.0]
+        python-version: [3.11]
       fail-fast: false
 
     steps:
       - run: echo "Job triggered by a ${{ github.event_name }} event on branch is ${{ github.ref }} in repository is ${{ github.repository }}, runner on ${{ runner.os }}"
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Installing Avocado in develop mode
-        run: python3 setup.py develop --user --skip-optional-plugins
+        run: python3 setup.py develop --user --skip-optional-plugins --skip-examples-plugins-tests
       - name: Avocado version
         run: avocado --version
       - name: Tree static check, unittests and fast functional tests without plugins
@@ -89,7 +89,7 @@ jobs:
           python3 selftests/check.py --disable-plugin-checks golang,html,resultsdb,result_upload,robot,varianter_cit,varianter_pict,varianter_yaml_to_mux
       - name: Archive test logs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: job-results-without-plugins
           path: /home/runner/avocado/job-results/

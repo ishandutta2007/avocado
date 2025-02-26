@@ -16,6 +16,31 @@ from avocado.core.suite import TestSuite
 from avocado.utils import process
 from selftests.utils import python_module_available
 
+TEST_SIZE = {
+    "static-checks": 7,
+    "job-api-check-archive-file-exists": 1,
+    "job-api-check-category-directory-exists": 1,
+    "job-api-check-directory-exists": 2,
+    "job-api-check-file-content": 9,
+    "job-api-check-file-exists": 11,
+    "job-api-check-output-file": 4,
+    "job-api-check-tmp-directory-exists": 1,
+    "nrunner-interface": 80,
+    "nrunner-requirement": 28,
+    "unit": 682,
+    "jobs": 11,
+    "functional-parallel": 318,
+    "functional-serial": 7,
+    "optional-plugins": 0,
+    "optional-plugins-golang": 2,
+    "optional-plugins-html": 3,
+    "optional-plugins-robot": 3,
+    "optional-plugins-varianter_cit": 40,
+    "optional-plugins-varianter_yaml_to_mux": 50,
+    "vmimage": 248,
+    "pre-release": 19,
+}
+
 
 class JobAPIFeaturesTest(Test):
     def check_directory_exists(self, path=None):
@@ -266,7 +291,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
 
     suites.append(
         TestSuite.from_config(
-            config_check_archive_file_exists, f"job-api-{len(suites) + 1}"
+            config_check_archive_file_exists, "job-api-check-archive-file-exists"
         )
     )
 
@@ -283,7 +308,8 @@ def create_suite_job_api(args):  # pylint: disable=W0621
 
     suites.append(
         TestSuite.from_config(
-            config_check_category_directory_exists, f"job-api-{len(suites) + 1}"
+            config_check_category_directory_exists,
+            "job-api-check-category-directory-exists",
         )
     )
 
@@ -311,7 +337,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
 
     suites.append(
         TestSuite.from_config(
-            config_check_directory_exists, f"job-api-{len(suites) + 1}"
+            config_check_directory_exists, "job-api-check-directory-exists"
         )
     )
 
@@ -404,7 +430,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
     }
 
     suites.append(
-        TestSuite.from_config(config_check_file_content, f"job-api-{len(suites) + 1}")
+        TestSuite.from_config(config_check_file_content, "job-api-check-file-content")
     )
 
     # ========================================================================
@@ -468,13 +494,6 @@ def create_suite_job_api(args):  # pylint: disable=W0621
                 "file": "result.xml",
                 "assert": False,
             },
-            # this test needs a huge improvement
-            {
-                "namespace": "run.journal.enabled",
-                "value": True,
-                "file": ".journal.sqlite",
-                "assert": True,
-            },
         ],
     }
 
@@ -502,7 +521,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
         )
 
     suites.append(
-        TestSuite.from_config(config_check_file_exists, f"job-api-{len(suites) + 1}")
+        TestSuite.from_config(config_check_file_exists, "job-api-check-file-exists")
     )
 
     # ========================================================================
@@ -545,7 +564,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
         )
 
     suites.append(
-        TestSuite.from_config(config_check_output_file, f"job-api-{len(suites) + 1}")
+        TestSuite.from_config(config_check_output_file, "job-api-check-output-file")
     )
 
     # ========================================================================
@@ -561,7 +580,7 @@ def create_suite_job_api(args):  # pylint: disable=W0621
 
     suites.append(
         TestSuite.from_config(
-            config_check_tmp_directory_exists, f"job-api-{len(suites) + 1}"
+            config_check_tmp_directory_exists, "job-api-check-tmp-directory-exists"
         )
     )
     return suites
@@ -574,11 +593,17 @@ def create_suites(args):  # pylint: disable=W0621
     if args.dict_tests["static-checks"]:
         config_check_static = copy.copy(config_check)
         config_check_static["resolver.references"] = glob.glob("selftests/*.sh")
+        config_check_static["resolver.references"].append(
+            "static-checks/check-import-order"
+        )
+        config_check_static["resolver.references"].append("static-checks/check-style")
+        config_check_static["resolver.references"].append("static-checks/check-lint")
         suites.append(TestSuite.from_config(config_check_static, "static-checks"))
 
     # ========================================================================
     # Run nrunner interface checks for all available runners
     # ========================================================================
+    nrunner_interface_size = 10
     config_nrunner_interface = {
         "resolver.references": ["selftests/functional/nrunner_interface.py"],
         "run.dict_variants.variant_id_keys": ["runner"],
@@ -604,6 +629,9 @@ def create_suites(args):  # pylint: disable=W0621
             {
                 "runner": "avocado-runner-podman-image",
             },
+            {
+                "runner": "avocado-runner-pip",
+            },
         ],
     }
 
@@ -616,6 +644,7 @@ def create_suites(args):  # pylint: disable=W0621
                 "runner": "avocado-runner-golang",
             }
         )
+        TEST_SIZE["nrunner-interface"] += nrunner_interface_size
 
     if (
         python_module_available("avocado-framework-plugin-robot")
@@ -626,6 +655,7 @@ def create_suites(args):  # pylint: disable=W0621
                 "runner": "avocado-runner-robot",
             }
         )
+        TEST_SIZE["nrunner-interface"] += nrunner_interface_size
 
     if (
         python_module_available("avocado-framework-plugin-ansible")
@@ -636,6 +666,7 @@ def create_suites(args):  # pylint: disable=W0621
                 "runner": "avocado-runner-ansible-module",
             }
         )
+        TEST_SIZE["nrunner-interface"] += nrunner_interface_size
 
     if args.dict_tests["nrunner-interface"]:
         suites.append(
@@ -652,6 +683,7 @@ def create_suites(args):  # pylint: disable=W0621
             {"spawner": "process"},
             {"spawner": "podman"},
             {"spawner": "lxc"},
+            {"spawner": "remote"},
         ],
     }
 
@@ -711,6 +743,28 @@ def create_suites(args):  # pylint: disable=W0621
 
         suites.append(TestSuite.from_config(config_check_optional, "optional-plugins"))
 
+    if args.dict_tests.get("vmimage"):
+        test_dir = os.path.join("selftests", "pre_release", "tests")
+        vmimage_config = {
+            "resolver.references": [os.path.join(test_dir, "vmimage.py")],
+            "yaml_to_mux.files": [
+                os.path.join(test_dir, "vmimage.py.data", "variants.yml")
+            ],
+            "run.max_parallel_tasks": 1,
+        }
+        suites.append(TestSuite.from_config(vmimage_config, "vmimage"))
+    if args.dict_tests.get("pre-release"):
+        os.environ["AVOCADO_CHECK_LEVEL"] = "3"
+        pre_release_config = {
+            "resolver.references": [
+                os.path.join("selftests", "unit"),
+                os.path.join("selftests", "functional"),
+            ],
+            "filter.by_tags.tags": ["parallel:1"],
+            "run.max_parallel_tasks": 1,
+        }
+        suites.append(TestSuite.from_config(pre_release_config, "pre-release"))
+
     return suites
 
 
@@ -726,6 +780,23 @@ def main(args):  # pylint: disable=W0621
         "functional": False,
         "optional-plugins": False,
     }
+    select_only = {
+        "vmimage": False,
+        "pre-release": False,
+    }
+
+    if python_module_available("avocado-framework-plugin-golang"):
+        TEST_SIZE["optional-plugins"] += TEST_SIZE["optional-plugins-golang"]
+    if python_module_available("avocado-framework-plugin-result-html"):
+        TEST_SIZE["optional-plugins"] += TEST_SIZE["optional-plugins-html"]
+    if python_module_available("avocado-framework-plugin-robot"):
+        TEST_SIZE["optional-plugins"] += TEST_SIZE["optional-plugins-robot"]
+    if python_module_available("avocado-framework-plugin-varianter-cit"):
+        TEST_SIZE["optional-plugins"] += TEST_SIZE["optional-plugins-varianter_cit"]
+    if python_module_available("avocado-framework-plugin-varianter-yaml-to-mux"):
+        TEST_SIZE["optional-plugins"] += TEST_SIZE[
+            "optional-plugins-varianter_yaml_to_mux"
+        ]
 
     # Make a list of strings instead of a list with a single string
     if len(args.disable_plugin_checks) > 0:
@@ -753,7 +824,7 @@ def main(args):  # pylint: disable=W0621
     # Will only run the test you select, --select must be followed by list of tests
     elif args.select:
         for elem in args.select:
-            if elem not in args.dict_tests.keys():
+            if elem not in args.dict_tests.keys() and elem not in select_only.keys():
                 print(elem, "is not in the list of valid tests.")
                 exit(0)
             else:
@@ -809,6 +880,19 @@ def main(args):  # pylint: disable=W0621
             print("check.py didn't clean test results.")
             print("uncleaned directories:")
             print(post_job_test_result_dirs.difference(pre_job_test_result_dirs))
+        for suite in j.test_suites:
+            if suite.size != TEST_SIZE[suite.name]:
+                if exit_code == 0:
+                    exit_code = 1
+                print(
+                    f"suite {suite.name} doesn't have {TEST_SIZE[suite.name]} tests"
+                    f" it has {suite.size}."
+                )
+                print(
+                    "If you made some changes into selftests please update `TEST_SIZE`"
+                    " variable in `check.py`. If you haven't done any changes to"
+                    " selftests this behavior is an ERROR, and it needs to be fixed."
+                )
 
     # tmp dirs clean up check
     process.run(f"{sys.executable} selftests/check_tmp_dirs")

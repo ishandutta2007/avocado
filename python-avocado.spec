@@ -27,8 +27,8 @@
 
 Summary: Framework with tools and libraries for Automated Testing
 Name: python-avocado
-Version: 102.0
-Release: 2%{?gitrel}%{?dist}
+Version: 109.0
+Release: 1%{?gitrel}%{?dist}
 License: GPLv2+ and GPLv2 and MIT
 URL: https://avocado-framework.github.io/
 %if 0%{?rel_build}
@@ -46,6 +46,9 @@ BuildRequires: python3-docutils
 BuildRequires: python3-lxml
 BuildRequires: python3-psutil
 BuildRequires: python3-setuptools
+%if ! 0%{?rhel}
+BuildRequires: python3-aexpect
+%endif
 
 %if ! 0%{?rhel}
 %if ! 0%{?fedora} > 35
@@ -81,6 +84,7 @@ Requires: python3-avocado-common == %{version}-%{release}
 Requires: gdb
 Requires: gdb-gdbserver
 Requires: procps-ng
+Requires: python3-jsonschema
 %if ! 0%{?rhel}
 Requires: python3-pycdlib
 %endif
@@ -99,6 +103,10 @@ these days a framework) to perform automated testing.
 %build
 %if 0%{?rhel}
 sed -e 's/"PyYAML>=4.2b2"/"PyYAML>=3.12"/' -i optional_plugins/varianter_yaml_to_mux/setup.py
+%endif
+%if 0%{?fedora} >= 42
+sed -e '/"markupsafe<3.0.0"/d' -i optional_plugins/html/setup.py
+sed -e '/"markupsafe<3.0.0"/d' -i optional_plugins/ansible/setup.py
 %endif
 %py3_build
 pushd optional_plugins/html
@@ -131,6 +139,14 @@ popd
 pushd optional_plugins/result_upload
 %py3_build
 popd
+pushd optional_plugins/mail
+%py3_build
+popd
+%if ! 0%{?rhel}
+pushd optional_plugins/spawner_remote
+%py3_build
+popd
+%endif
 rst2man man/avocado.rst man/avocado.1
 
 %install
@@ -166,6 +182,14 @@ popd
 pushd optional_plugins/result_upload
 %py3_install
 popd
+pushd optional_plugins/mail
+%py3_install
+popd
+%if ! 0%{?rhel}
+pushd optional_plugins/spawner_remote
+%py3_install
+popd
+%endif
 mkdir -p %{buildroot}%{_mandir}/man1
 install -m 0644 man/avocado.1 %{buildroot}%{_mandir}/man1/avocado.1
 mkdir -p %{buildroot}%{_pkgdocdir}
@@ -178,9 +202,12 @@ cp -r examples/tests %{buildroot}%{_docdir}/avocado
 cp -r examples/yaml_to_mux %{buildroot}%{_docdir}/avocado
 cp -r examples/varianter_pict %{buildroot}%{_docdir}/avocado
 cp -r examples/varianter_cit %{buildroot}%{_docdir}/avocado
+mkdir -p %{buildroot}%{_datarootdir}/avocado
+mv %{buildroot}%{python3_sitelib}/avocado/schemas %{buildroot}%{_datarootdir}/avocado
 find %{buildroot}%{_docdir}/avocado -type f -name '*.py' -exec chmod -c -x {} ';'
 mkdir -p %{buildroot}%{_libexecdir}/avocado
 mv %{buildroot}%{python3_sitelib}/avocado/libexec/* %{buildroot}%{_libexecdir}/avocado
+rmdir %{buildroot}%{python3_sitelib}/avocado/libexec
 
 %if %{with tests}
 %check
@@ -209,6 +236,7 @@ PATH=%{buildroot}%{_bindir}:%{buildroot}%{_libexecdir}/avocado:$PATH \
 %{_bindir}/avocado-runner-tap
 %{_bindir}/avocado-runner-asset
 %{_bindir}/avocado-runner-package
+%{_bindir}/avocado-runner-pip
 %{_bindir}/avocado-runner-podman-image
 %{_bindir}/avocado-runner-sysinfo
 %{_bindir}/avocado-software-manager
@@ -222,6 +250,7 @@ PATH=%{buildroot}%{_bindir}:%{buildroot}%{_libexecdir}/avocado:$PATH \
 %exclude %{python3_sitelib}/avocado_varianter_pict*
 %exclude %{python3_sitelib}/avocado_varianter_cit*
 %exclude %{python3_sitelib}/avocado_result_upload*
+%exclude %{python3_sitelib}/avocado_result_mail*
 %exclude %{python3_sitelib}/avocado_framework_plugin_result_html*
 %exclude %{python3_sitelib}/avocado_framework_plugin_resultsdb*
 %exclude %{python3_sitelib}/avocado_framework_plugin_varianter_yaml_to_mux*
@@ -230,6 +259,8 @@ PATH=%{buildroot}%{_bindir}:%{buildroot}%{_libexecdir}/avocado:$PATH \
 %exclude %{python3_sitelib}/avocado_framework_plugin_golang*
 %exclude %{python3_sitelib}/avocado_framework_plugin_ansible*
 %exclude %{python3_sitelib}/avocado_framework_plugin_result_upload*
+%exclude %{python3_sitelib}/avocado_framework_plugin_result_mail*
+%exclude %{python3_sitelib}/avocado_framework_plugin_spawner_remote*
 %exclude %{python3_sitelib}/tests*
 
 %package -n python3-avocado-common
@@ -249,6 +280,10 @@ Common files (such as configuration) for the Avocado Testing Framework.
 %dir %{_sysconfdir}/avocado/scripts/job/pre.d
 %dir %{_sysconfdir}/avocado/scripts/job/post.d
 %dir %{_sharedstatedir}/avocado
+%dir %{_sharedstatedir}/avocado/data
+%dir %{_datarootdir}/avocado
+%dir %{_datarootdir}/avocado/schemas
+%{_datarootdir}/avocado/schemas/*
 %config(noreplace)%{_sysconfdir}/avocado/sysinfo/commands
 %config(noreplace)%{_sysconfdir}/avocado/sysinfo/files
 %config(noreplace)%{_sysconfdir}/avocado/sysinfo/profilers
@@ -374,6 +409,33 @@ a dedicated sever.
 %{python3_sitelib}/avocado_result_upload*
 %{python3_sitelib}/avocado_framework_plugin_result_upload*
 
+%package -n python3-avocado-plugins-result-mail
+Summary: Avocado Mail Notification for Jobs
+License: GPLv2+
+Requires: python3-avocado == %{version}-%{release}
+
+%description -n python3-avocado-plugins-result-mail
+The Mail result plugin enables you to receive email notifications
+for job start and completion events within the Avocado testing framework.
+
+%files -n python3-avocado-plugins-result-mail
+%{python3_sitelib}/avocado_result_mail*
+%{python3_sitelib}/avocado_framework_plugin_result_mail*
+
+%if ! 0%{?rhel}
+%package -n python3-avocado-plugins-spawner-remote
+Summary: Avocado Plugin to spawn tests on a remote host
+License: GPLv2+
+Requires: python3-avocado == %{version}-%{release}
+
+%description -n python3-avocado-plugins-spawner-remote
+This optional plugin is intended to spawn tests on a remote host.
+
+%files -n python3-avocado-plugins-spawner-remote
+%{python3_sitelib}/avocado_spawner_remote*
+%{python3_sitelib}/avocado_framework_plugin_spawner_remote*
+%endif
+
 %package -n python3-avocado-examples
 Summary: Avocado Test Framework Example Tests
 License: GPLv2+
@@ -408,6 +470,33 @@ Again Shell code (and possibly other similar shells).
 %{_libexecdir}/avocado*
 
 %changelog
+* Tue Jan 14 2025 Jan Richter <jarichte@redhat.com> - 109.0-1
+- New release
+
+* Mon Oct 07 2024 Jan Richter <jarichte@redhat.com> - 108.0-1
+- New release
+
+* Mon Sep 02 2024 Cleber Rosa <crosa@redhat.com> - 107.0-1
+- New release
+
+* Sat Jun 29 2024 Cleber Rosa <crosa@redhat.com> - 106.0-1
+- New release
+
+* Tue May 07 2024 Cleber Rosa <crosa@redhat.com> - 105.0-1
+- New release
+
+* Tue Apr  2 2024 Cleber Rosa <crosa@redhat.com> - 104.0-2
+- Package JSON schema files
+- Removed empty libexec dir
+- Require python3-jsonschema to perform runtime schema validation
+  for recipe files
+
+* Tue Mar 19 2024 Jan Richter <jarichte@redhat.com> - 104.0-1
+- New release
+
+* Sat Jan 06 2024 Cleber Rosa <crosa@redhat.com> - 103.0-1
+- New release
+
 * Tue Jul 18 2023 Cleber Rosa <crosa@redhat.com> - 102.0-2
 - Removed python3-elementpath build requirement
 

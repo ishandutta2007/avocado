@@ -58,10 +58,9 @@ def has_userland_tool(executable):
     """
     if os.path.isabs(executable):
         return os.path.isfile(executable)
-    else:
-        for path in os.environ["PATH"].split(os.pathsep):
-            if os.path.isfile(os.path.join(path, executable)):
-                return True
+    for path in os.environ["PATH"].split(os.pathsep):
+        if os.path.isfile(os.path.join(path, executable)):
+            return True
     return False
 
 
@@ -129,7 +128,6 @@ def can_mount():
 
 
 class BaseIso9660:
-
     """
     Represents a ISO9660 filesystem
 
@@ -203,14 +201,12 @@ class MixInMntDirMount:
         """
         Cleanups and frees any resources being used
         """
-        super().close()
         if self._mount_instance:
             self._mount_instance.close()
             self._mount_instance = None
 
 
 class Iso9660IsoInfo(MixInMntDirMount, BaseIso9660):
-
     """
     Represents a ISO9660 filesystem
 
@@ -278,7 +274,6 @@ class Iso9660IsoInfo(MixInMntDirMount, BaseIso9660):
 
 
 class Iso9660IsoRead(MixInMntDirMount, BaseIso9660):
-
     """
     Represents a ISO9660 filesystem
 
@@ -306,7 +301,6 @@ class Iso9660IsoRead(MixInMntDirMount, BaseIso9660):
 
 
 class Iso9660Mount(BaseIso9660):
-
     """
     Represents a mounted ISO9660 filesystem.
     """
@@ -375,7 +369,6 @@ class Iso9660Mount(BaseIso9660):
 
 
 class ISO9660PyCDLib(MixInMntDirMount, BaseIso9660):
-
     """
     Represents a ISO9660 filesystem
 
@@ -499,7 +492,7 @@ def iso9660(path, capabilities=None):
         ("mount", can_mount, Iso9660Mount, common_capabilities),
     ]
 
-    for (name, check, klass, cap) in implementations:
+    for name, check, klass, cap in implementations:
         if capabilities is not None and not set(capabilities).issubset(cap):
             continue
         if check():

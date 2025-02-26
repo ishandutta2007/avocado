@@ -63,6 +63,7 @@ class Asset:
     Try to fetch/verify an asset file from multiple locations.
     """
 
+    # pylint: disable=R0913
     def __init__(
         self,
         name=None,
@@ -261,6 +262,7 @@ class Asset:
                     os.symlink(path, asset_path)
                     self._create_hash_file(asset_path)
                     return self._verify_hash(asset_path)
+        return False
 
     def _get_relative_dir(self):
         """
@@ -485,8 +487,8 @@ class Asset:
         """
         try:
             asset_file = self.find_asset_file()
-        except OSError:
-            raise OSError("Metadata not available.")
+        except OSError as exc:
+            raise OSError("Metadata not available.") from exc
 
         basename = os.path.splitext(asset_file)[0]
         metadata_file = f"{basename}_metadata.json"
@@ -494,6 +496,7 @@ class Asset:
             with open(metadata_file, "r", encoding="utf-8") as f:
                 metadata = json.load(f)
                 return metadata
+        return None
 
     @property
     def asset_name(self):
@@ -588,21 +591,21 @@ class Asset:
         try:
             op = re.match("^(\\D+)(\\d+)$", size_filter).group(1)
             value = int(re.match("^(\\D+)(\\d+)$", size_filter).group(2))
-        except (AttributeError, ValueError):
+        except (AttributeError, ValueError) as exc:
             msg = (
                 "Invalid syntax. You need to pass an comparison operatator",
                 " and a value. Ex: '>=200'",
             )
-            raise OSError(msg)
+            raise OSError(msg) from exc
 
         try:
             method = SUPPORTED_OPERATORS[op]
-        except KeyError:
+        except KeyError as exc:
             msg = (
                 "Operator not supported. Currented valid values are: ",
                 ", ".join(SUPPORTED_OPERATORS),
             )
-            raise OSError(msg)
+            raise OSError(msg) from exc
 
         result = []
         for file_path in cls.get_all_assets(cache_dirs):
@@ -651,6 +654,7 @@ class Asset:
         parsed = self.parsed_name
         if parsed:
             return parsed.scheme
+        return None
 
     @property
     def name_url(self):
@@ -660,6 +664,7 @@ class Asset:
         """
         if self.name_scheme:
             return self.parsed_name.geturl()
+        return None
 
     @staticmethod
     def parse_name(name):
@@ -684,9 +689,14 @@ class Asset:
 
         :param asset_path: full path of the asset file.
         """
-        os.remove(asset_path)
-        filename = f"{asset_path}-CHECKSUM"
-        os.remove(filename)
+        try:
+            os.remove(asset_path)
+            filename = f"{asset_path}-CHECKSUM"
+            os.remove(filename)
+        except FileNotFoundError:
+            LOG.error("File not found: %s or its checksum file.", asset_path)
+        except OSError as e:
+            LOG.error("An error occurred while removing files: %s", e)
 
     @property
     def urls(self):

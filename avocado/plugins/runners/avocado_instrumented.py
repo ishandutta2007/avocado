@@ -1,16 +1,14 @@
 import multiprocessing
 import os
+import signal
 import sys
 import tempfile
 import time
 import traceback
 
+from avocado.core.exceptions import TestInterrupt
 from avocado.core.nrunner.app import BaseRunnerApp
-from avocado.core.nrunner.runner import (
-    RUNNER_RUN_CHECK_INTERVAL,
-    RUNNER_RUN_STATUS_INTERVAL,
-    BaseRunner,
-)
+from avocado.core.nrunner.runner import RUNNER_RUN_CHECK_INTERVAL, BaseRunner
 from avocado.core.test import TestID
 from avocado.core.tree import TreeNodeEnvOnly
 from avocado.core.utils import loader, messages
@@ -43,6 +41,11 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
     ]
 
     @staticmethod
+    def signal_handler(signum, frame):  # pylint: disable=W0613
+        if signum == signal.SIGTERM.value:
+            raise TestInterrupt("Test interrupted: Timeout reached")
+
+    @staticmethod
     def _create_params(runnable):
         """Create params for the test"""
         if runnable.variant is None:
@@ -60,6 +63,14 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
 
     @staticmethod
     def _run_avocado(runnable, queue):
+        def load_and_run_test(test_factory):
+            instance = loader.load_test(test_factory)
+            early_state = instance.get_state()
+            early_state["type"] = "early_state"
+            queue.put(early_state)
+            instance.run_avocado()
+            return instance.get_state()
+
         try:
             # This assumes that a proper resolution (see resolver module)
             # was performed, and that a URI contains:
@@ -69,6 +80,7 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
             #
             # To be defined: if the resolution uri should be composed like
             # this, or broken down and stored into other data fields
+            signal.signal(signal.SIGTERM, AvocadoInstrumentedTestRunner.signal_handler)
             module_path, klass_method = runnable.uri.split(":", 1)
 
             klass, method = klass_method.split(".", 1)
@@ -90,23 +102,17 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
 
             messages.start_logging(runnable.config, queue)
 
+            # running the actual test
             if "COVERAGE_RUN" in os.environ:
                 from coverage import Coverage
 
-                coverage = Coverage()
-                coverage.start()
-
-            instance = loader.load_test(test_factory)
-            early_state = instance.get_state()
-            early_state["type"] = "early_state"
-            queue.put(early_state)
-            instance.run_avocado()
-
-            if "COVERAGE_RUN" in os.environ:
-                coverage.stop()
+                coverage = Coverage(data_suffix=True)
+                with coverage.collect():
+                    state = load_and_run_test(test_factory)
                 coverage.save()
+            else:
+                state = load_and_run_test(test_factory)
 
-            state = instance.get_state()
             fail_reason = state.get("fail_reason")
             queue.put(messages.WhiteboardMessage.get(state["whiteboard"]))
             queue.put(
@@ -129,8 +135,22 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
                 )
             )
 
+    @staticmethod
+    def _monitor(queue):
+        while True:
+            time.sleep(RUNNER_RUN_CHECK_INTERVAL)
+            if queue.empty():
+                yield messages.RunningMessage.get()
+            else:
+                message = queue.get()
+                if message.get("type") != "early_state":
+                    yield message
+                if message.get("status") == "finished":
+                    break
+
     def run(self, runnable):
         # pylint: disable=W0201
+        signal.signal(signal.SIGTERM, AvocadoInstrumentedTestRunner.signal_handler)
         self.runnable = runnable
         yield messages.StartedMessage.get()
         try:
@@ -141,29 +161,13 @@ class AvocadoInstrumentedTestRunner(BaseRunner):
 
             process.start()
 
-            time_started = time.monotonic()
+            for message in self._monitor(queue):
+                yield message
 
-            timeout = float("inf")
-            next_status_time = None
-            while True:
-                time.sleep(RUNNER_RUN_CHECK_INTERVAL)
-                now = time.monotonic()
-                if queue.empty():
-                    if next_status_time is None or now > next_status_time:
-                        next_status_time = now + RUNNER_RUN_STATUS_INTERVAL
-                        yield messages.RunningMessage.get()
-                    if (now - time_started) > timeout:
-                        process.terminate()
-                        yield messages.FinishedMessage.get("interrupted", "timeout")
-                        break
-                else:
-                    message = queue.get()
-                    if message.get("type") == "early_state":
-                        timeout = float(message.get("timeout") or float("inf"))
-                    else:
-                        yield message
-                    if message.get("status") == "finished":
-                        break
+        except TestInterrupt:
+            process.terminate()
+            for message in self._monitor(queue):
+                yield message
         except Exception as e:
             yield messages.StderrMessage.get(traceback.format_exc())
             yield messages.FinishedMessage.get(

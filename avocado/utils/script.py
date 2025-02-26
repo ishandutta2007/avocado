@@ -40,7 +40,6 @@ READ_ONLY_MODE = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
 
 
 class Script:
-
     """
     Class that represents a script.
     """
@@ -101,16 +100,15 @@ class Script:
             os.remove(self.path)
             self.stored = False
             return True
-        else:
-            return False
+        return False
 
 
 class TemporaryScript(Script):
-
     """
     Class that represents a temporary script.
     """
 
+    # pylint: disable=R0913
     def __init__(
         self, name, content, prefix="avocado_script", mode=DEFAULT_MODE, open_mode="w"
     ):
