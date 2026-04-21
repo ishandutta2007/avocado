@@ -680,11 +680,13 @@ class Podman(_Podman):
         :param str pids_limit: PIDs limit (default: "0" - unlimited).
         :param str userns: User namespace mode (default: "keep-id").
         :param str group_add: Group add mode (default: "keep-groups").
-        :param str port_mapping: Port mapping in format [host_ip]:[host_port]:container_port
-                                 (default: "127.0.0.1::8000" - localhost with random host port to container port 8000).
-                                 Examples: "127.0.0.1:8000:8000" (fixed host port 8000),
-                                          "0.0.0.0::8000" (all interfaces, random host port),
-                                          "::8000" (all interfaces, random host port).
+        :param str port_mapping: Port mapping in format
+            ``[host_ip]:[host_port]:container_port`` (default:
+            ``"127.0.0.1::8000"`` - localhost with random host port to
+            container port 8000). Examples:
+            ``"127.0.0.1:8000:8000"`` (fixed host port 8000),
+            ``"0.0.0.0::8000"`` (all interfaces, random host port),
+            ``"::8000"`` (all interfaces, random host port).
         :param str vllm_spyre_use_cb: Optional VLLM Spyre use CB flag (e.g., "1"). If None, not set.
         :param int vllm_dt_chunk_len: Optional DT chunk length. If None, not set.
         :param int vllm_spyre_use_chunked_prefill: Optional chunked prefill flag. If None, not set.
@@ -1488,11 +1490,13 @@ class AsyncPodman(_Podman):
         :param str pids_limit: PIDs limit (default: "0" - unlimited).
         :param str userns: User namespace mode (default: "keep-id").
         :param str group_add: Group add mode (default: "keep-groups").
-        :param str port_mapping: Port mapping in format [host_ip]:[host_port]:container_port
-                                 (default: "127.0.0.1::8000" - localhost with random host port to container port 8000).
-                                 Examples: "127.0.0.1:8000:8000" (fixed host port 8000),
-                                          "0.0.0.0::8000" (all interfaces, random host port),
-                                          "::8000" (all interfaces, random host port).
+        :param str port_mapping: Port mapping in format
+            ``[host_ip]:[host_port]:container_port`` (default:
+            ``"127.0.0.1::8000"`` - localhost with random host port to
+            container port 8000). Examples:
+            ``"127.0.0.1:8000:8000"`` (fixed host port 8000),
+            ``"0.0.0.0::8000"`` (all interfaces, random host port),
+            ``"::8000"`` (all interfaces, random host port).
         :param str vllm_spyre_use_cb: Use CB flag (default: "1").
         :param int vllm_dt_chunk_len: Optional DT chunk length.
         :param int vllm_spyre_use_chunked_prefill: Optional chunked prefill flag.
